@@ -1,0 +1,141 @@
+import mongoose, { Schema, Document } from 'mongoose';
+
+// ─── Custom field definition ──────────────────────────────────────────────────
+// Templates carry a list of "field specs" that tell the creation wizard
+// which fields to show, their type, label, default value, and constraints.
+
+export type FieldType =
+  | 'text' | 'textarea' | 'number' | 'date' | 'time' | 'datetime'
+  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone';
+
+export interface IFieldSpec {
+  key: string;           // unique camelCase key, maps to EventFormData field
+  label: string;         // display label
+  fieldType: FieldType;
+  required: boolean;
+  defaultValue?: string;
+  placeholder?: string;
+  helpText?: string;
+  options?: string[];    // for select / multiselect
+  min?: number;          // for number / date
+  max?: number;
+  maxLength?: number;    // for text / textarea
+  section: 'basics' | 'datetime' | 'venue' | 'capacity' | 'policies' | 'media' | 'custom';
+  order: number;         // display order within section
+}
+
+// ─── Session template ─────────────────────────────────────────────────────────
+export interface ISessionTemplate {
+  title: string;
+  sessionType: string;
+  defaultDurationMinutes: number;
+  description?: string;
+  defaultFields: IFieldSpec[];
+}
+
+// ─── Main interface ───────────────────────────────────────────────────────────
+export interface IEventTemplate extends Document {
+  name: string;
+  description: string;
+  eventType: string;
+  format: 'physical' | 'virtual' | 'hybrid';
+  isFree: boolean;
+  isDefault: boolean;           // seeded system template — cannot be deleted
+  isSystemTemplate: boolean;    // same flag, prevents certain edits
+  createdBy?: mongoose.Types.ObjectId;
+  organization?: mongoose.Types.ObjectId;
+
+  // Fields shown in the event creation wizard
+  fields: IFieldSpec[];
+
+  // Default visibility / lifecycle
+  defaultVisibility: string;
+  defaultStatus: string;
+
+  // Default policy values
+  defaultPolicies: {
+    refundPolicy?: string;
+    cancellationPolicy?: string;
+    attendeeMinAge?: number;
+  };
+
+  // Session templates bundled with this event template
+  sessionTemplates: ISessionTemplate[];
+
+  // Sub-event config
+  allowsSubEvents: boolean;
+  maxSubEventDepth: number;       // 1 = only one level of sub-events
+
+  // Metadata
+  coverColor: string;             // hex colour used in the template card
+  tags: string[];
+  usageCount: number;
+  version: number;
+}
+
+// ─── Sub-schemas ──────────────────────────────────────────────────────────────
+
+const FieldSpecSchema = new Schema<IFieldSpec>({
+  key:          { type: String, required: true },
+  label:        { type: String, required: true },
+  fieldType:    { type: String, required: true, enum: ['text','textarea','number','date','time','datetime','select','multiselect','toggle','url','email','phone'] },
+  required:     { type: Boolean, default: false },
+  defaultValue: { type: String },
+  placeholder:  { type: String },
+  helpText:     { type: String },
+  options:      [{ type: String }],
+  min:          { type: Number },
+  max:          { type: Number },
+  maxLength:    { type: Number },
+  section:      { type: String, enum: ['basics','datetime','venue','capacity','policies','media','custom'], default: 'basics' },
+  order:        { type: Number, default: 0 },
+}, { _id: false });
+
+const SessionTemplateSchema = new Schema<ISessionTemplate>({
+  title:                  { type: String, required: true },
+  sessionType:            { type: String, default: 'other' },
+  defaultDurationMinutes: { type: Number, default: 60 },
+  description:            { type: String },
+  defaultFields:          [FieldSpecSchema],
+}, { _id: false });
+
+const EventTemplateSchema = new Schema<IEventTemplate>({
+  name:        { type: String, required: true, trim: true },
+  description: { type: String, default: '' },
+  eventType:   { type: String, enum: ['conference','workshop','hackathon','concert','exhibition','summit','festival','competition','webinar','other'], default: 'other' },
+  format:      { type: String, enum: ['physical','virtual','hybrid'], default: 'physical' },
+  isFree:      { type: Boolean, default: true },
+
+  isDefault:        { type: Boolean, default: false },
+  isSystemTemplate: { type: Boolean, default: false },
+
+  createdBy:    { type: Schema.Types.ObjectId, ref: 'User' },
+  organization: { type: Schema.Types.ObjectId, ref: 'Organization' },
+
+  fields: [FieldSpecSchema],
+
+  defaultVisibility: { type: String, default: 'public' },
+  defaultStatus:     { type: String, default: 'draft' },
+
+  defaultPolicies: {
+    refundPolicy:       { type: String },
+    cancellationPolicy: { type: String },
+    attendeeMinAge:     { type: Number, default: 0 },
+  },
+
+  sessionTemplates: [SessionTemplateSchema],
+
+  allowsSubEvents:   { type: Boolean, default: true },
+  maxSubEventDepth:  { type: Number, default: 1 },
+
+  coverColor: { type: String, default: '#3B82F6' },
+  tags:       [{ type: String }],
+  usageCount: { type: Number, default: 0 },
+  version:    { type: Number, default: 1 },
+}, { timestamps: true });
+
+EventTemplateSchema.index({ isDefault: 1 });
+EventTemplateSchema.index({ eventType: 1 });
+EventTemplateSchema.index({ organization: 1 });
+
+export const EventTemplate = mongoose.model<IEventTemplate>('EventTemplate', EventTemplateSchema);
