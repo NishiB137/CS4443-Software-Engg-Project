@@ -1,11 +1,37 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import connectDB from './config/db.js';
+import eventRoutes    from './routes/eventRoutes.js';
+import sessionRoutes  from './routes/sessionRoutes.js';
+// import tagRoutes      from './routes/tagRoutes.js';
+import templateRoutes from './routes/templateRoutes.js';
+// import interactionRoutes from './routes/interactionRoutes.js';
 
+// ─── Model imports ─────────────────────────────────────────────────────────────
+import './models/User.js';
+import './models/Organization.js';
+import './models/Event.js';
+import './models/EventTemplate.js';
+import './models/Session.js';
+import './models/Tag.js';
+// import './models/UserEventInteraction.js';
+import './models/Registration.js';
+import './models/Comment.js';
+
+import { seedDefaultTemplates } from './utils/seedTemplates.js';
+import { ensureDevBootstrap } from './utils/ensureDevBootstrap.js';
 
 dotenv.config();
 
 const app = express();
+
+// ─── DB ───────────────────────────────────────────────────────────────────────
+connectDB().then(() => {
+  // Run seeder after DB is ready
+  ensureDevBootstrap().catch((e) => console.error('[bootstrap] error:', e));
+  seedDefaultTemplates().catch((e) => console.error('[seed] error:', e));
+});
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({
@@ -18,6 +44,13 @@ app.use(express.json());
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// ─── Routes ────────────────────────────────────────────────────────────────────
+app.use('/api/events',       eventRoutes);
+app.use('/api/sessions',     sessionRoutes);
+// app.use('/api/tags',         tagRoutes);
+app.use('/api/templates',    templateRoutes);
+// app.use('/api/interactions', interactionRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => {
