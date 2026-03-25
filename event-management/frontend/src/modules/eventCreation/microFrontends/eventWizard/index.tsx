@@ -23,7 +23,11 @@ export const EventWizardMFE: React.FC = () => {
   } = useEventWizard();
 
   const renderStepContent = () => {
-    const props = { data: formData, updateData: updateFormData, errors: stepErrors };
+    const props = {
+      data: formData,
+      updateData: updateFormData,
+      errors: stepErrors as Record<string, string>,
+    };
     switch (currentStep) {
       case 1: return <Step1Template {...props} />;
       case 2: return <Step2BasicDetails {...props} />;

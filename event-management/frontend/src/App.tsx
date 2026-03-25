@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { LandingPage }        from './modules/eventDiscovery/pages/LandingPage';
 import { EventPage }          from './modules/eventDiscovery/pages/EventPage';
@@ -6,6 +5,7 @@ import { CreateEventPage }    from './modules/eventCreation/pages/CreateEventPag
 import { TemplateListPage }   from './modules/templateManagement/pages/TemplateListPage';
 import { TemplateCreatePage } from './modules/templateManagement/pages/TemplateCreatePage';
 import { TemplateEditPage }   from './modules/templateManagement/pages/TemplateEditPage';
+import { TemplateViewPage }   from './modules/templateManagement/pages/TemplateViewPage';
 
 function App() {
   return (
@@ -18,6 +18,7 @@ function App() {
         <Route path="/templates"          element={<TemplateListPage />} />
         <Route path="/templates/new"      element={<TemplateCreatePage />} />
         <Route path="/templates/:id/edit" element={<TemplateEditPage />} />
+        <Route path="/templates/:id"      element={<TemplateViewPage />} />
       </Routes>
     </BrowserRouter>
   );

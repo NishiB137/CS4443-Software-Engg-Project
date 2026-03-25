@@ -27,10 +27,13 @@ export const useTemplates = () => {
     setTemplates((prev) => prev.filter((t) => t._id !== id));
   };
 
-  const duplicateTemplate = async (id: string, name: string) => {
-    const res = await templateApi.duplicate(id, name);
-    setTemplates((prev) => [res.data, ...prev]);
-    return res.data;
+  const duplicateTemplate = async (id: string, name: string): Promise<void> => {
+    try {
+      const res = await templateApi.duplicate(id, name);
+      setTemplates((prev) => [res.data, ...prev]);
+    } catch (e) {
+      throw new Error(e instanceof Error ? e.message : 'Duplicate failed');
+    }
   };
 
   return { templates, loading, error, reload: load, deleteTemplate, duplicateTemplate };

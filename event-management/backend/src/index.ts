@@ -4,9 +4,7 @@ import cors from 'cors';
 import connectDB from './config/db.js';
 import eventRoutes    from './routes/eventRoutes.js';
 import sessionRoutes  from './routes/sessionRoutes.js';
-// import tagRoutes      from './routes/tagRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
-// import interactionRoutes from './routes/interactionRoutes.js';
 
 // ─── Model imports ─────────────────────────────────────────────────────────────
 import './models/User.js';
@@ -15,7 +13,6 @@ import './models/Event.js';
 import './models/EventTemplate.js';
 import './models/Session.js';
 import './models/Tag.js';
-// import './models/UserEventInteraction.js';
 import './models/Registration.js';
 import './models/Comment.js';
 
@@ -48,9 +45,7 @@ app.get('/api/health', (_req, res) => {
 // ─── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/events',       eventRoutes);
 app.use('/api/sessions',     sessionRoutes);
-// app.use('/api/tags',         tagRoutes);
 app.use('/api/templates',    templateRoutes);
-// app.use('/api/interactions', interactionRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => {

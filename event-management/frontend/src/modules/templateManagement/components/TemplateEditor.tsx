@@ -28,17 +28,19 @@ const lbl = 'block text-sm font-medium text-gray-700 mb-1';
 
 interface Props {
   templateId?: string;   // undefined = create mode
+  /** When true (view route), all fields are read-only. Default templates opened on /edit redirect to the view route. */
+  readOnly?: boolean;
 }
 
-export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
+export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }) => {
   const navigate  = useNavigate();
   const isEdit    = !!templateId;
+  const viewOnly  = readOnly;
 
   const [tab, setTab]                 = useState<Tab>('Basic Info');
   const [saving, setSaving]           = useState(false);
   const [loadError, setLoadError]     = useState<string | null>(null);
   const [saveError, setSaveError]     = useState<string | null>(null);
-  const [isSystem, setIsSystem]       = useState(false);
 
   const [form, setForm] = useState<Partial<ApiTemplate>>({
     name: '', description: '', eventType: 'other', format: 'physical',
@@ -47,14 +49,17 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
     defaultPolicies: {}, allowsSubEvents: true, maxSubEventDepth: 1,
   });
 
-  // Load existing template
+  // Load existing template — default templates cannot use /edit (redirect to view-only route)
   useEffect(() => {
     if (!templateId) return;
     templateApi.getById(templateId).then((res) => {
+      if (!readOnly && res.data.isDefault) {
+        navigate(`/templates/${templateId}`, { replace: true });
+        return;
+      }
       setForm(res.data);
-      setIsSystem(res.data.isSystemTemplate);
     }).catch((e) => setLoadError(e.message));
-  }, [templateId]);
+  }, [templateId, readOnly, navigate]);
 
   const upd = (patch: Partial<ApiTemplate>) => setForm((p) => ({ ...p, ...patch }));
 
@@ -67,6 +72,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
   const removeTag = (i: number) => upd({ tags: (form.tags || []).filter((_, j) => j !== i) });
 
   const handleSave = async () => {
+    if (viewOnly) return;
     if (!form.name?.trim()) { setSaveError('Template name is required.'); return; }
     setSaving(true); setSaveError(null);
     try {
@@ -90,10 +96,6 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
     </div>
   );
 
-  const systemFieldKeys = isSystem
-    ? (form.fields || []).filter((f) => f.key).map((f) => f.key)
-    : [];
-
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -106,23 +108,25 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
           </button>
           <div>
             <h1 className="text-xl font-bold text-gray-900">
-              {isEdit ? `Edit: ${form.name || 'Template'}` : 'Create New Template'}
+              {isEdit ? (viewOnly ? `View: ${form.name || 'Template'}` : `Edit: ${form.name || 'Template'}`) : 'Create New Template'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              {isEdit ? `v${form.version ?? 1}${isSystem ? ' · System Template' : ''}` : 'Define fields and session structure for this event type'}
+              {isEdit ? `v${form.version ?? 1}${form.isDefault ? ' · Default template' : ''}` : 'Define fields and session structure for this event type'}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/templates')}
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">
-            Cancel
+            {viewOnly ? 'Back' : 'Cancel'}
           </button>
-          <button onClick={handleSave} disabled={saving}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
-            {saving && <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>}
-            {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
-          </button>
+          {!viewOnly && (
+            <button onClick={handleSave} disabled={saving}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
+              {saving && <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>}
+              {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -135,12 +139,13 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
         </div>
       )}
 
-      {isSystem && (
-        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700 flex items-center gap-2">
+      {viewOnly && (
+        <div className="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-700 flex items-center gap-2">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
           </svg>
-          This is a system template. You can edit description, colour, and tags. To change fields or structure, duplicate it first.
+          View only. Default templates cannot be edited — duplicate from the list to create a customizable copy.
         </div>
       )}
 
@@ -169,13 +174,14 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
             <div className="md:col-span-2">
               <label className={lbl}>Template Name <span className="text-red-500">*</span></label>
               <input type="text" className={inp(!form.name?.trim())} value={form.name || ''} maxLength={100}
-                disabled={isSystem} placeholder="e.g. Tech Conference 2026"
+                disabled={viewOnly} placeholder="e.g. Tech Conference 2026"
                 onChange={(e) => upd({ name: e.target.value })} />
             </div>
 
             <div className="md:col-span-2">
               <label className={lbl}>Description</label>
               <textarea rows={3} className={inp()} value={form.description || ''} maxLength={500}
+                disabled={viewOnly}
                 placeholder="Describe what this template is best suited for..."
                 onChange={(e) => upd({ description: e.target.value })} />
               <p className="text-xs text-gray-400 mt-1 text-right">{(form.description || '').length}/500</p>
@@ -183,7 +189,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
 
             <div>
               <label className={lbl}>Event Type</label>
-              <select className={inp()} value={form.eventType || 'other'} disabled={isSystem}
+              <select className={inp()} value={form.eventType || 'other'} disabled={viewOnly}
                 onChange={(e) => upd({ eventType: e.target.value })}>
                 {EVENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
@@ -191,7 +197,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
 
             <div>
               <label className={lbl}>Default Format</label>
-              <select className={inp()} value={form.format || 'physical'} disabled={isSystem}
+              <select className={inp()} value={form.format || 'physical'} disabled={viewOnly}
                 onChange={(e) => upd({ format: e.target.value as ApiTemplate['format'] })}>
                 <option value="physical">Physical (in-person)</option>
                 <option value="virtual">Virtual (online)</option>
@@ -203,7 +209,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
               <label className={lbl}>Default Pricing</label>
               <div className="flex gap-2">
                 {[{ v: true, l: 'Free' }, { v: false, l: 'Paid' }].map(({ v, l }) => (
-                  <button key={l} type="button" onClick={() => upd({ isFree: v })}
+                  <button key={l} type="button" onClick={() => upd({ isFree: v })} disabled={viewOnly}
                     className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition ${
                       form.isFree === v
                         ? v ? 'bg-green-50 border-green-500 text-green-700' : 'bg-orange-50 border-orange-500 text-orange-700'
@@ -216,7 +222,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
 
             <div>
               <label className={lbl}>Default Visibility</label>
-              <select className={inp()} value={form.defaultVisibility || 'public'}
+              <select className={inp()} value={form.defaultVisibility || 'public'} disabled={viewOnly}
                 onChange={(e) => upd({ defaultVisibility: e.target.value })}>
                 <option value="public">Public</option>
                 <option value="restricted">Restricted</option>
@@ -231,14 +237,14 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
             <label className={lbl}>Template Colour</label>
             <div className="flex items-center gap-3 flex-wrap">
               {COLORS.map((c) => (
-                <button key={c} type="button" onClick={() => upd({ coverColor: c })}
-                  className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                <button key={c} type="button" onClick={() => upd({ coverColor: c })} disabled={viewOnly}
+                  className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 disabled:opacity-50 disabled:pointer-events-none ${
                     form.coverColor === c ? 'border-gray-900 scale-110' : 'border-transparent'
                   }`} style={{ backgroundColor: c }} />
               ))}
-              <input type="color" value={form.coverColor || '#2563EB'}
+              <input type="color" value={form.coverColor || '#2563EB'} disabled={viewOnly}
                 onChange={(e) => upd({ coverColor: e.target.value })}
-                className="w-8 h-8 rounded-full border-2 border-gray-200 cursor-pointer" title="Custom colour" />
+                className="w-8 h-8 rounded-full border-2 border-gray-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" title="Custom colour" />
               <span className="text-xs text-gray-400">or pick custom</span>
             </div>
           </div>
@@ -250,7 +256,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
               {(form.tags || []).map((tag, i) => (
                 <span key={i} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full border border-blue-100">
                   {tag}
-                  <button type="button" onClick={() => removeTag(i)} className="text-blue-400 hover:text-blue-600">
+                  <button type="button" onClick={() => removeTag(i)} disabled={viewOnly} className="text-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:pointer-events-none">
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                   </button>
                 </span>
@@ -258,9 +264,10 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
             </div>
             <div className="flex gap-2">
               <input type="text" className={`${inp()} flex-1`} value={tagInput} placeholder="Add tag..."
+                disabled={viewOnly}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); }}} />
-              <button type="button" onClick={addTag} disabled={!tagInput.trim()}
+              <button type="button" onClick={addTag} disabled={!tagInput.trim() || viewOnly}
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition disabled:opacity-40">
                 Add
               </button>
@@ -286,7 +293,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
           <FieldBuilder
             fields={(form.fields || []) as FieldSpec[]}
             onChange={(fields) => upd({ fields: fields as ApiTemplate['fields'] })}
-            systemFieldKeys={systemFieldKeys}
+            readOnly={viewOnly}
           />
         </div>
       )}
@@ -305,6 +312,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
           <SessionTemplateBuilder
             sessions={(form.sessionTemplates || []) as SessionTemplate[]}
             onChange={(sessions) => upd({ sessionTemplates: sessions as ApiTemplate['sessionTemplates'] })}
+            readOnly={viewOnly}
           />
         </div>
       )}
@@ -322,7 +330,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
                 </div>
                 <button type="button"
                   onClick={() => upd({ allowsSubEvents: !form.allowsSubEvents })}
-                  disabled={isSystem}
+                  disabled={viewOnly}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                     form.allowsSubEvents ? 'bg-blue-600' : 'bg-gray-300'
                   } disabled:opacity-60`}>
@@ -336,7 +344,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
                 <div className="max-w-xs">
                   <label className={lbl}>Max Sub-Event Depth (1–3)</label>
                   <input type="number" className={inp()} min={1} max={3} value={form.maxSubEventDepth || 1}
-                    disabled={isSystem}
+                    disabled={viewOnly}
                     onChange={(e) => upd({ maxSubEventDepth: Math.min(3, Math.max(1, Number(e.target.value))) })} />
                   <p className="text-xs text-gray-400 mt-1">
                     1 = Event → Sub-events only · 2 = Event → Sub-events → Sub-sub-events
@@ -351,7 +359,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className={lbl}>Default Refund Policy</label>
-                <select className={inp()} value={form.defaultPolicies?.refundPolicy || ''}
+                <select className={inp()} value={form.defaultPolicies?.refundPolicy || ''} disabled={viewOnly}
                   onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, refundPolicy: e.target.value } })}>
                   <option value="">None / ask organizer</option>
                   <option value="full">Full refund</option>
@@ -361,13 +369,13 @@ export const TemplateEditor: React.FC<Props> = ({ templateId }) => {
               </div>
               <div>
                 <label className={lbl}>Default Minimum Attendee Age</label>
-                <input type="number" className={inp()} min={0} max={120}
+                <input type="number" className={inp()} min={0} max={120} disabled={viewOnly}
                   value={form.defaultPolicies?.attendeeMinAge ?? 0}
                   onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, attendeeMinAge: Number(e.target.value) } })} />
               </div>
               <div className="md:col-span-2">
                 <label className={lbl}>Default Cancellation Policy</label>
-                <textarea rows={3} className={inp()} maxLength={2000}
+                <textarea rows={3} className={inp()} maxLength={2000} disabled={viewOnly}
                   value={form.defaultPolicies?.cancellationPolicy || ''}
                   placeholder="Standard cancellation terms for this template..."
                   onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, cancellationPolicy: e.target.value } })} />

@@ -61,6 +61,20 @@ export interface ApiEvent {
   analytics: { likes: number; bookmarks: number; views: number; registrations: number };
   policies?: Record<string, unknown>;
   faqs?: Array<{ question: string; answer: string }>;
+  /** Present on GET /events/:id and /slug/:slug when sessions are embedded */
+  sessions?: unknown[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiComment {
+  _id: string;
+  eventId: string;
+  userId: string;
+  userName: string;
+  content: string;
+  likes: number;
+  isApproved: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -149,6 +163,19 @@ export const eventApi = {
 
   getChangelog: (id: string) =>
     request<{ success: boolean; data: unknown[] }>(`/events/${id}/changelog`),
+
+  /** Increment server-side like counter (idempotent per browser via localStorage in UI) */
+  like: (id: string) =>
+    request<{ success: boolean; likes: number }>(`/events/${id}/like`, { method: 'POST' }),
+
+  getComments: (eventId: string) =>
+    request<{ success: boolean; data: ApiComment[] }>(`/events/${eventId}/comments`),
+
+  addComment: (eventId: string, userId: string, userName: string, content: string) =>
+    request<{ success: boolean; data: ApiComment }>(`/events/${eventId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ userId, userName, content }),
+    }),
 };
 
 // ─── Template types ───────────────────────────────────────────────────────────

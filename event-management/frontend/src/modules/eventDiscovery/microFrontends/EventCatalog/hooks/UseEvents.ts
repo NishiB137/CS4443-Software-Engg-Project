@@ -87,6 +87,13 @@ export const useEvents = () => {
   const [searchQuery, setSearchQuery]   = useState('');
   const [filterType, setFilterType]     = useState<'All' | 'Free' | 'Paid'>('All');
   const [category, setCategory]         = useState('All');
+  /** '' | physical | virtual | hybrid */
+  const [formatFilter, setFormatFilter] = useState('');
+  /** yyyy-mm-dd */
+  const [startDateFrom, setStartDateFrom] = useState('');
+  const [startDateTo, setStartDateTo]     = useState('');
+  /** empty = any; number = suitable for attendees of at least this age */
+  const [suitableForAge, setSuitableForAge] = useState('');
   const [currentPage, setCurrentPage]   = useState(1);
   const [totalPages, setTotalPages]     = useState(1);
 
@@ -97,19 +104,24 @@ export const useEvents = () => {
       const params: Record<string, string> = {
         page:  String(currentPage),
         limit: '9',
+        status: 'published',
+        visibility: 'public',
       };
       if (searchQuery.trim())        params['search']     = searchQuery.trim();
       if (filterType === 'Free')     params['isFree']     = 'true';
       if (filterType === 'Paid')     params['isFree']     = 'false';
+      if (category !== 'All')       params['category']   = category;
+      if (formatFilter)             params['format']     = formatFilter;
+      if (startDateFrom.trim())     params['startDateFrom'] = new Date(startDateFrom).toISOString();
+      if (startDateTo.trim())       params['startDateTo']   = new Date(startDateTo + 'T23:59:59.999').toISOString();
+      if (suitableForAge.trim() !== '') {
+        const n = Number(suitableForAge);
+        if (!Number.isNaN(n)) params['suitableForAge'] = String(Math.min(120, Math.max(0, n)));
+      }
 
       const res = await eventApi.list(params);
 
-      let mapped = res.events.map(mapEvent);
-
-      // Client-side category filter (backend has no category field, we derive from eventType)
-      if (category !== 'All') {
-        mapped = mapped.filter(e => e.category === category);
-      }
+      const mapped = res.events.map(mapEvent);
 
       setEvents(mapped);
       setTotalPages(res.pagination.totalPages || 1);
@@ -120,7 +132,7 @@ export const useEvents = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, filterType, category, currentPage]);
+  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, currentPage]);
 
   useEffect(() => {
     const timer = setTimeout(fetchEvents, searchQuery ? 400 : 0);
@@ -130,13 +142,17 @@ export const useEvents = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterType, category]);
+  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge]);
 
   return {
     events, loading, error,
     searchQuery, setSearchQuery,
     filterType, setFilterType,
     category, setCategory,
+    formatFilter, setFormatFilter,
+    startDateFrom, setStartDateFrom,
+    startDateTo, setStartDateTo,
+    suitableForAge, setSuitableForAge,
     currentPage, setCurrentPage, totalPages,
     refetch: fetchEvents,
   };

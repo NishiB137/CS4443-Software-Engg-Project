@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "prepare": "cd ../.. && husky install event-management/frontend/.husky"
+    "preview": "vite preview"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

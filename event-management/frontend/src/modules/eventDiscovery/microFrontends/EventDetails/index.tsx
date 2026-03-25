@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useEventDetails } from '@/modules/eventDiscovery/microFrontends/EventDetails/hooks/useEventDetails';
 import { SupportTicketModal } from '@/modules/eventDiscovery/microFrontends/EventDetails/components/SupportTicketModal';
+import { format } from 'date-fns';
 
 // ─── Skeleton loader ──────────────────────────────────────────────────────────
 const Skeleton = () => (
@@ -44,12 +45,29 @@ const ErrorState = ({ message }: { message: string }) => (
   </div>
 );
 
+// ─── Helper: format ISO datetime for sessions ─────────────────────────────────
+const formatSessionTime = (iso: string): string => {
+  if (!iso) return '';
+  try { return format(new Date(iso), 'MMM d, yyyy • h:mm a'); } catch { return iso; }
+};
+
+const SESSION_TYPE_LABELS: Record<string, string> = {
+  keynote:           '🎤 Keynote',
+  panel:             '💬 Panel',
+  workshop:          '🛠️ Workshop',
+  networking:        '🤝 Networking',
+  performance:       '🎭 Performance',
+  competition_round: '🏆 Competition Round',
+  break:             '☕ Break',
+  other:             '📋 Session',
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export const EventDetailsMFE: React.FC = () => {
   const {
     event, loading, error,
     isTicketModalOpen, setIsTicketModalOpen,
-    isLiked, setIsLiked,
+    isLiked, toggleLike, likeBusy,
     isBookmarked, setIsBookmarked,
     selectedTicketId, setSelectedTicketId,
     comments, handleAddComment,
@@ -58,6 +76,7 @@ export const EventDetailsMFE: React.FC = () => {
   const [currentImageIdx, setCurrentImageIdx] = useState(0);
   const [commentInput, setCommentInput]       = useState('');
   const [activeTab, setActiveTab]             = useState<'details' | 'agenda' | 'venue'>('details');
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
 
   // Auto-play slideshow
   useEffect(() => {
@@ -144,8 +163,11 @@ export const EventDetailsMFE: React.FC = () => {
         {/* Action buttons */}
         <div className="absolute top-6 right-6 flex gap-3 z-20">
           <button
-            onClick={() => setIsLiked(!isLiked)}
-            className="bg-white/20 backdrop-blur-md p-3 rounded-full hover:bg-white/40 transition"
+            type="button"
+            disabled={likeBusy}
+            onClick={() => void toggleLike()}
+            title={isLiked ? 'Liked' : 'Like this event'}
+            className="bg-white/20 backdrop-blur-md p-3 rounded-full hover:bg-white/40 transition disabled:opacity-60"
           >
             <svg className={`w-6 h-6 ${isLiked ? 'fill-red-500 text-red-500' : 'text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -172,7 +194,6 @@ export const EventDetailsMFE: React.FC = () => {
         {/* Hero text */}
         <div className="absolute bottom-0 left-0 w-full p-8 z-10">
           <div className="max-w-7xl mx-auto text-white">
-            {/* Status badges */}
             <div className="flex flex-wrap gap-2 mb-3">
               <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                 event.status === 'published' ? 'bg-green-500/80 backdrop-blur-sm' :
@@ -316,12 +337,8 @@ export const EventDetailsMFE: React.FC = () => {
                   <div className="text-sm text-text-secondary space-y-2">
                     <p className="text-text-primary font-medium">This is an online event.</p>
                     {event.onlineLink && (
-                      <a
-                        href={event.onlineLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-block text-primary underline break-all"
-                      >
+                      <a href={event.onlineLink} target="_blank" rel="noreferrer"
+                        className="inline-block text-primary underline break-all">
                         {event.onlineLink}
                       </a>
                     )}
@@ -332,6 +349,149 @@ export const EventDetailsMFE: React.FC = () => {
                     <p>{event.locationInfo}</p>
                   </div>
                 )}
+              </div>
+            )}
+          </section>
+
+          {/* ── Sessions / Agenda ── NEW SECTION ── */}
+          <section className="bg-surface p-8 rounded-2xl shadow-sm border border-border">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-text-primary">Sessions & Agenda</h2>
+              {event.sessions.length > 0 && (
+                <span className="text-xs font-semibold bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full">
+                  {event.sessions.length} session{event.sessions.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+
+            {event.sessions.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-3xl mb-2">📅</div>
+                <p className="text-text-secondary text-sm">No sessions have been added yet.</p>
+                <p className="text-text-secondary text-xs mt-1">Check back closer to the event date for the full agenda.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {event.sessions.map(session => {
+                  const isExpanded = expandedSession === session.id;
+                  return (
+                    <div key={session.id} className="border border-border rounded-xl overflow-hidden">
+                      {/* Session header */}
+                      <button
+                        onClick={() => setExpandedSession(isExpanded ? null : session.id)}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-background transition text-left"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-xs font-semibold text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full whitespace-nowrap">
+                            {SESSION_TYPE_LABELS[session.sessionType] ?? '📋 Session'}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-text-primary truncate">{session.title}</p>
+                            {session.startTime && (
+                              <p className="text-xs text-text-secondary mt-0.5">
+                                {formatSessionTime(session.startTime)}
+                                {session.endTime && ` → ${formatSessionTime(session.endTime)}`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 ml-4">
+                          {session.room && (
+                            <span className="text-xs text-text-secondary hidden sm:block">📍 {session.room}</span>
+                          )}
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            session.status === 'live'      ? 'bg-red-50 text-red-600 border border-red-200' :
+                            session.status === 'completed' ? 'bg-gray-100 text-gray-500 border border-gray-200' :
+                            'bg-green-50 text-green-600 border border-green-200'
+                          }`}>
+                            {session.status === 'live' ? '🔴 Live' : session.status === 'completed' ? 'Completed' : 'Scheduled'}
+                          </span>
+                          <svg className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+
+                      {/* Expanded session details */}
+                      {isExpanded && (
+                        <div className="px-5 pb-5 border-t border-border bg-background space-y-4">
+                          {session.description && (
+                            <p className="text-sm text-text-secondary leading-relaxed pt-4">{session.description}</p>
+                          )}
+
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                            {session.room && (
+                              <div className="bg-surface rounded-lg p-3 border border-border">
+                                <p className="text-text-secondary font-medium mb-0.5">Room / Location</p>
+                                <p className="text-text-primary font-semibold">{session.room}</p>
+                              </div>
+                            )}
+                            {session.maxAttendees && (
+                              <div className="bg-surface rounded-lg p-3 border border-border">
+                                <p className="text-text-secondary font-medium mb-0.5">Capacity</p>
+                                <p className="text-text-primary font-semibold">{session.maxAttendees.toLocaleString()}</p>
+                              </div>
+                            )}
+                            {session.streamUrl && (
+                              <div className="bg-surface rounded-lg p-3 border border-border">
+                                <p className="text-text-secondary font-medium mb-0.5">Stream</p>
+                                <a href={session.streamUrl} target="_blank" rel="noreferrer"
+                                  className="text-primary underline text-xs break-all">
+                                  Watch online
+                                </a>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Tags */}
+                          {session.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {session.tags.map(tag => (
+                                <span key={tag} className="text-xs bg-surface border border-border text-text-secondary px-2.5 py-1 rounded-full">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Speakers */}
+                          {session.speakers.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">Speakers</p>
+                              <div className="space-y-3">
+                                {session.speakers.map((speaker, si) => (
+                                  <div key={si} className="flex items-start gap-3">
+                                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0 overflow-hidden">
+                                      {speaker.avatarUrl
+                                        ? <img src={speaker.avatarUrl} alt={speaker.name} className="w-full h-full object-cover" />
+                                        : (speaker.name?.[0] ?? 'S')
+                                      }
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-text-primary">{speaker.name ?? 'Speaker'}</p>
+                                      {(speaker.designation || speaker.organization) && (
+                                        <p className="text-xs text-text-secondary">
+                                          {[speaker.designation, speaker.organization].filter(Boolean).join(', ')}
+                                        </p>
+                                      )}
+                                      {speaker.topic && (
+                                        <p className="text-xs text-primary mt-0.5">Topic: {speaker.topic}</p>
+                                      )}
+                                      {speaker.bio && (
+                                        <p className="text-xs text-text-secondary mt-1 leading-relaxed">{speaker.bio}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -416,27 +576,36 @@ export const EventDetailsMFE: React.FC = () => {
             </section>
           )}
 
-          {/* FAQs */}
-          {event.faqs.length > 0 && (
-            <section className="bg-surface p-8 rounded-2xl shadow-sm border border-border">
-              <h2 className="text-2xl font-bold text-text-primary mb-6">Frequently Asked Questions</h2>
-              <div className="space-y-4">
+          {/* ── FAQs ── always shown ── */}
+          <section className="bg-surface p-8 rounded-2xl shadow-sm border border-border">
+            <h2 className="text-2xl font-bold text-text-primary mb-6">Frequently Asked Questions</h2>
+
+            {event.faqs.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-3xl mb-2">💬</div>
+                <p className="text-text-secondary text-sm">No FAQs have been added for this event.</p>
+                <p className="text-text-secondary text-xs mt-1">
+                  Use the Discussion section below to ask your questions.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
                 {event.faqs.map((faq, i) => (
                   <details key={i} className="group border border-border rounded-xl overflow-hidden">
                     <summary className="px-5 py-4 font-semibold text-text-primary cursor-pointer list-none flex items-center justify-between hover:bg-background transition">
                       {faq.question}
-                      <svg className="w-4 h-4 text-text-secondary group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-text-secondary group-open:rotate-180 transition-transform shrink-0 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                       </svg>
                     </summary>
-                    <div className="px-5 pb-4 text-sm text-text-secondary bg-background">
+                    <div className="px-5 pb-4 pt-2 text-sm text-text-secondary bg-background leading-relaxed">
                       {faq.answer}
                     </div>
                   </details>
                 ))}
               </div>
-            </section>
-          )}
+            )}
+          </section>
 
           {/* Discussion */}
           <section className="bg-surface p-8 rounded-2xl shadow-sm border border-border">
@@ -508,12 +677,8 @@ export const EventDetailsMFE: React.FC = () => {
                 <strong className="block text-text-primary mb-1">Location</strong>
                 <p>{event.locationInfo}</p>
                 {event.onlineLink && event.format !== 'physical' && (
-                  <a
-                    href={event.onlineLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-primary underline block mt-1 break-all"
-                  >
+                  <a href={event.onlineLink} target="_blank" rel="noreferrer"
+                    className="text-xs text-primary underline block mt-1 break-all">
                     Join Online
                   </a>
                 )}
@@ -557,6 +722,43 @@ export const EventDetailsMFE: React.FC = () => {
               Contact Organizer / Support
             </button>
           </div>
+
+          {/* ── Point of Contact ── NEW SECTION ── */}
+          {(event.pocDetails.name || event.pocDetails.email) && (
+            <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border">
+              <h3 className="font-bold text-text-primary mb-4">Point of Contact</h3>
+              <div className="space-y-3 text-sm">
+                {event.pocDetails.name && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                      {event.pocDetails.name[0]}
+                    </div>
+                    <span className="text-text-primary font-medium">{event.pocDetails.name}</span>
+                  </div>
+                )}
+                {event.pocDetails.email && (
+                  <a href={`mailto:${event.pocDetails.email}`}
+                    className="flex items-center gap-2.5 text-text-secondary hover:text-primary transition">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span className="break-all">{event.pocDetails.email}</span>
+                  </a>
+                )}
+                {event.pocDetails.phone && (
+                  <a href={`tel:${event.pocDetails.phone}`}
+                    className="flex items-center gap-2.5 text-text-secondary hover:text-primary transition">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    <span>{event.pocDetails.phone}</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Sponsors */}
           {event.sponsors.length > 0 && (

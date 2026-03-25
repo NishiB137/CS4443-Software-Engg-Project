@@ -10,6 +10,10 @@ export const EventCatalogMFE: React.FC = () => {
     searchQuery, setSearchQuery,
     filterType, setFilterType,
     category, setCategory,
+    formatFilter, setFormatFilter,
+    startDateFrom, setStartDateFrom,
+    startDateTo, setStartDateTo,
+    suitableForAge, setSuitableForAge,
     currentPage, setCurrentPage, totalPages,
   } = useEvents();
 
@@ -18,6 +22,7 @@ export const EventCatalogMFE: React.FC = () => {
   };
 
   const CATEGORIES = ['All', 'Music', 'Tech', 'Sports', 'Education', 'Art', 'Business', 'General'];
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12">
@@ -58,12 +63,65 @@ export const EventCatalogMFE: React.FC = () => {
             <option value="Free">Free</option>
             <option value="Paid">Paid</option>
           </select>
-          <button className="bg-background border border-border text-text-primary px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-border transition flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className={`bg-background border border-border text-text-primary px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-border transition flex items-center gap-2 ${filtersOpen ? 'ring-2 ring-primary' : ''}`}
+          >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
             Filters
           </button>
         </div>
       </div>
+
+      {filtersOpen && (
+        <div className="mb-8 p-4 rounded-xl border border-border bg-surface shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">Format</label>
+            <select
+              value={formatFilter}
+              onChange={(e) => setFormatFilter(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+            >
+              <option value="">Any format</option>
+              <option value="physical">In-person</option>
+              <option value="virtual">Online</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">Starts from</label>
+            <input
+              type="date"
+              value={startDateFrom}
+              onChange={(e) => setStartDateFrom(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">Starts before</label>
+            <input
+              type="date"
+              value={startDateTo}
+              onChange={(e) => setStartDateTo(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">My age (min. age filter)</label>
+            <input
+              type="number"
+              min={0}
+              max={120}
+              placeholder="e.g. 18"
+              value={suitableForAge}
+              onChange={(e) => setSuitableForAge(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+            />
+            <p className="text-[10px] text-text-secondary mt-1">Shows events you can attend (required min age ≤ your age)</p>
+          </div>
+        </div>
+      )}
 
       {/* Error state */}
       {error && !loading && (

@@ -1,5 +1,23 @@
 import { Event } from '../models/Event.js';
 import { Session } from '../models/Session.js';
+
+/** UI category chips → eventType values (must match frontend UseEvents / Landing) */
+export const CATEGORY_EVENT_TYPES: Record<string, string[]> = {
+  Music: ['concert', 'festival'],
+  Tech: ['conference', 'hackathon', 'webinar'],
+  Sports: ['competition'],
+  Education: ['workshop'],
+  Art: ['exhibition'],
+  Business: ['summit'],
+  General: ['other'],
+};
+
+async function attachSessions(eventLean: Record<string, unknown> | null) {
+  if (!eventLean || !eventLean['_id']) return eventLean;
+  const id = String(eventLean['_id']);
+  const sessions = await Session.find({ event: id }).sort({ order: 1, startTime: 1 }).lean();
+  return { ...eventLean, sessions };
+}
 import { generateSlug } from '../utils/slug.js';
 import type { CreateEventBody, UpdateEventBody } from '../types/event.types.js';
 
@@ -163,17 +181,21 @@ export const createEvent = async (body: CreateEventBody) => {
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
 export const getEventById = async (id: string) => {
-  return Event.findById(id)
+  const event = await Event.findById(id)
     .populate('tags',         'name slug')
     .populate('organization', 'name slug logo')
-    .populate('createdBy',    'name email avatar');
+    .populate('createdBy',    'name email avatar')
+    .lean();
+  return attachSessions(event as Record<string, unknown> | null);
 };
 
 export const getEventBySlug = async (slug: string) => {
-  return Event.findOne({ slug })
+  const event = await Event.findOne({ slug })
     .populate('tags',         'name slug')
     .populate('organization', 'name slug logo')
-    .populate('createdBy',    'name email avatar');
+    .populate('createdBy',    'name email avatar')
+    .lean();
+  return attachSessions(event as Record<string, unknown> | null);
 };
 
 export const listEvents = async (filters: {
@@ -185,10 +207,23 @@ export const listEvents = async (filters: {
   createdBy?: string;
   page?: number;
   limit?: number;
+  /** Single eventType enum value */
+  eventType?: string;
+  /** Maps to multiple eventTypes (Music → concert, festival, …) */
+  category?: string;
+  format?: 'physical' | 'virtual' | 'hybrid';
+  /** ISO date string — events with startDate >= this */
+  startDateFrom?: string;
+  /** ISO date string — events with startDate <= this */
+  startDateTo?: string;
+  /** User’s age — only events where required min age ≤ this (or unset / 0) */
+  suitableForAge?: number;
 }) => {
   const {
     status, visibility = 'public', isFree, search,
     organization, createdBy, page = 1, limit = 12,
+    eventType, category, format,
+    startDateFrom, startDateTo, suitableForAge,
   } = filters;
 
   const safePage  = Math.max(1, Math.floor(page));
@@ -201,6 +236,35 @@ export const listEvents = async (filters: {
   if (organization) query['organization'] = organization;
   if (createdBy)    query['createdBy']    = createdBy;
   if (search)       query['$text']        = { $search: search };
+  if (format)       query['format']       = format;
+
+  if (eventType) {
+    query['eventType'] = eventType;
+  } else if (category && category !== 'All' && CATEGORY_EVENT_TYPES[category]) {
+    query['eventType'] = { $in: CATEGORY_EVENT_TYPES[category] };
+  }
+
+  const dateRange: Record<string, Date> = {};
+  if (startDateFrom) {
+    const d = new Date(startDateFrom);
+    if (!isNaN(d.getTime())) dateRange['$gte'] = d;
+  }
+  if (startDateTo) {
+    const d = new Date(startDateTo);
+    if (!isNaN(d.getTime())) dateRange['$lte'] = d;
+  }
+  if (Object.keys(dateRange).length > 0) {
+    query['startDate'] = dateRange;
+  }
+
+  if (suitableForAge !== undefined && Number.isFinite(suitableForAge)) {
+    const age = Math.min(120, Math.max(0, Math.floor(Number(suitableForAge))));
+    query['$or'] = [
+      { 'policies.attendeeMinAge': { $lte: age } },
+      { 'policies.attendeeMinAge': { $exists: false } },
+      { 'policies.attendeeMinAge': null },
+    ];
+  }
 
   const skip = (safePage - 1) * safeLimit;
 
@@ -218,6 +282,15 @@ export const listEvents = async (filters: {
     events,
     pagination: { total, page: safePage, limit: safeLimit, totalPages: Math.ceil(total / safeLimit) },
   };
+};
+
+/** Increment like counter (public, no auth — client may dedupe with localStorage) */
+export const incrementEventLikes = async (id: string) => {
+  return Event.findByIdAndUpdate(
+    id,
+    { $inc: { 'analytics.likes': 1 } },
+    { new: true },
+  ).select('analytics');
 };
 
 // ─── Update ───────────────────────────────────────────────────────────────────

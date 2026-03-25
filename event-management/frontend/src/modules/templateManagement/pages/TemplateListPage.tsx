@@ -30,20 +30,30 @@ const FormatBadge: React.FC<{ format: string }> = ({ format }) => {
 const TemplateCard: React.FC<{
   template: ApiTemplate;
   onDelete: (id: string) => void;
-  onDuplicate: (id: string, name: string) => void;
+  onDuplicate: (id: string, name: string) => Promise<void>;
 }> = ({ template, onDelete, onDuplicate }) => {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dupName, setDupName]   = useState('');
   const [dupMode, setDupMode]   = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
+  const [dupError, setDupError] = useState<string | null>(null);
+  const [dupLoading, setDupLoading] = useState(false);
 
-  const handleDuplicate = () => {
+  const handleDuplicate = async () => {
     const name = dupName.trim() || `${template.name} (Copy)`;
-    onDuplicate(template._id, name);
-    setDupMode(false);
-    setDupName('');
-    setMenuOpen(false);
+    setDupError(null);
+    setDupLoading(true);
+    try {
+      await onDuplicate(template._id, name);
+      setDupMode(false);
+      setDupName('');
+      setMenuOpen(false);
+    } catch (e) {
+      setDupError(e instanceof Error ? e.message : 'Could not duplicate template');
+    } finally {
+      setDupLoading(false);
+    }
   };
 
   return (
@@ -69,8 +79,8 @@ const TemplateCard: React.FC<{
           {/* Menu */}
           <div className="relative flex-shrink-0">
             <button
+              type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -78,15 +88,32 @@ const TemplateCard: React.FC<{
               </svg>
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-8 z-20 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1 text-sm">
+              <div
+                className="absolute right-0 top-8 z-20 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1 text-sm"
+                onMouseDown={(e) => e.preventDefault()}
+              >
                 <button
-                  onClick={() => { navigate(`/templates/${template._id}/edit`); setMenuOpen(false); }}
+                  type="button"
+                  onClick={() => {
+                    navigate(template.isDefault ? `/templates/${template._id}` : `/templates/${template._id}/edit`);
+                    setMenuOpen(false);
+                  }}
                   className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center gap-2"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
-                  Edit
+                  {template.isDefault ? (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                      View
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                      Edit
+                    </>
+                  )}
                 </button>
                 <button
+                  type="button"
                   onClick={() => { setDupMode(true); setMenuOpen(false); }}
                   className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center gap-2"
                 >
@@ -95,6 +122,7 @@ const TemplateCard: React.FC<{
                 </button>
                 {!template.isDefault && (
                   <button
+                    type="button"
                     onClick={() => { setDelConfirm(true); setMenuOpen(false); }}
                     className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"
                   >
@@ -136,10 +164,10 @@ const TemplateCard: React.FC<{
 
         {/* Action */}
         <Link
-          to={`/templates/${template._id}/edit`}
+          to={template.isDefault ? `/templates/${template._id}` : `/templates/${template._id}/edit`}
           className="w-full py-2 text-center text-sm font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition mt-auto"
         >
-          View / Edit
+          {template.isDefault ? 'View' : 'View / Edit'}
         </Link>
       </div>
 
@@ -151,15 +179,18 @@ const TemplateCard: React.FC<{
             <p className="text-xs text-gray-500 mb-4">Give the copy a new name</p>
             <input
               type="text"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none mb-4"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none mb-2"
               value={dupName}
               placeholder={`${template.name} (Copy)`}
               onChange={(e) => setDupName(e.target.value)}
               autoFocus
             />
-            <div className="flex gap-2">
-              <button onClick={() => setDupMode(false)} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDuplicate} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">Duplicate</button>
+            {dupError && (
+              <p className="text-xs text-red-600 mb-2">{dupError}</p>
+            )}
+            <div className="flex gap-2 mt-2">
+              <button type="button" onClick={() => { setDupMode(false); setDupError(null); }} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button type="button" disabled={dupLoading} onClick={() => void handleDuplicate()} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">{dupLoading ? '…' : 'Duplicate'}</button>
             </div>
           </div>
         </div>
@@ -185,7 +216,6 @@ const TemplateCard: React.FC<{
           </div>
         </div>
       )}
-      
     </div>
   );
 };

@@ -117,12 +117,11 @@ export const updateTemplate = async (id: string, body: TemplateBody) => {
   const template = await EventTemplate.findById(id);
   if (!template) return null;
 
-  // System templates: only allow editing non-structural fields
-  if (template.isSystemTemplate) {
-    const allowedSystemEdits = ['description', 'coverColor', 'tags'];
-    const attempted = Object.keys(body).filter((k) => !allowedSystemEdits.includes(k));
-    if (attempted.length > 0)
-      throw new Error(`System templates only allow editing: ${allowedSystemEdits.join(', ')}.`);
+  // Default / system templates are view-only via API — duplicate to customize
+  if (template.isDefault || template.isSystemTemplate) {
+    throw new Error(
+      'Default templates cannot be modified. Duplicate this template to create an editable copy.',
+    );
   }
 
   validateBody(body, false);

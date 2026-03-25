@@ -20,7 +20,6 @@ export const createEvent = async (req: Request, res: Response) => {
     };
 
     const event = await eventService.createEvent(body);
-    console.log(event);
     res.status(201).json({ success: true, data: event });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Server error';
@@ -41,6 +40,12 @@ export const listEvents = async (req: Request, res: Response) => {
       createdBy,
       page,
       limit,
+      category,
+      eventType,
+      format,
+      startDateFrom,
+      startDateTo,
+      suitableForAge,
     } = req.query;
 
     // exactOptionalPropertyTypes: only include keys whose value is not undefined
@@ -55,6 +60,15 @@ export const listEvents = async (req: Request, res: Response) => {
     if (typeof createdBy    === 'string') filters.createdBy    = createdBy;
     if (isFree === 'true')  filters.isFree = true;
     if (isFree === 'false') filters.isFree = false;
+    if (typeof category === 'string') filters.category = category;
+    if (typeof eventType === 'string') filters.eventType = eventType;
+    if (format === 'physical' || format === 'virtual' || format === 'hybrid') filters.format = format;
+    if (typeof startDateFrom === 'string') filters.startDateFrom = startDateFrom;
+    if (typeof startDateTo === 'string') filters.startDateTo = startDateTo;
+    if (typeof suitableForAge === 'string' && suitableForAge.trim() !== '') {
+      const n = Number(suitableForAge);
+      if (!Number.isNaN(n)) filters.suitableForAge = n;
+    }
 
     const result = await eventService.listEvents(filters);
     res.json({ success: true, ...result });
@@ -155,6 +169,24 @@ export const deleteEvent = async (req: Request, res: Response) => {
       return;
     }
     res.json({ success: true, message: 'Event deleted' });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(500).json({ success: false, message });
+  }
+};
+
+// ─── POST /api/events/:id/like — increment public like counter ───────────────
+export const likeEvent = async (req: Request, res: Response) => {
+  try {
+    const updated = await eventService.incrementEventLikes(param(req, 'id'));
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Event not found' });
+      return;
+    }
+    res.json({
+      success: true,
+      likes: updated.analytics?.likes ?? 0,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Server error';
     res.status(500).json({ success: false, message });

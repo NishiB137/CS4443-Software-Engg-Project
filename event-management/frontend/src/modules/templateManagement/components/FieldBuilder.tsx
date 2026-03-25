@@ -37,6 +37,17 @@ const EMPTY_FIELD: FieldSpec = {
   section: 'custom', order: 0,
 };
 
+/** Stable internal keys for new fields — not shown in the UI. */
+function nextCustomFieldKey(fields: FieldSpec[]): string {
+  let max = 0;
+  const re = /^customField(\d+)$/i;
+  for (const f of fields) {
+    const m = (f.key ?? '').match(re);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `customField${max + 1}`;
+}
+
 interface FieldRowProps {
   field: FieldSpec;
   index: number;
@@ -47,11 +58,13 @@ interface FieldRowProps {
   isFirst: boolean;
   isLast: boolean;
   isSystemField: boolean;
+  readOnly?: boolean;
 }
 
 const FieldRow: React.FC<FieldRowProps> = ({
-  field, index, onUpdate, onRemove, onMoveUp, onMoveDown, isFirst, isLast, isSystemField,
+  field, index, onUpdate, onRemove, onMoveUp, onMoveDown, isFirst, isLast, isSystemField, readOnly,
 }) => {
+  const lockKey = readOnly || isSystemField;
   const [expanded, setExpanded] = useState(false);
   const [optionInput, setOptionInput] = useState('');
   const needsOptions = field.fieldType === 'select' || field.fieldType === 'multiselect';
@@ -73,31 +86,24 @@ const FieldRow: React.FC<FieldRowProps> = ({
       <div className="flex items-center gap-2 px-3 py-2.5">
         {/* Reorder */}
         <div className="flex flex-col gap-0.5 flex-shrink-0">
-          <button type="button" onClick={onMoveUp}  disabled={isFirst}  className="text-gray-300 hover:text-gray-500 disabled:opacity-20 leading-none">
+          <button type="button" onClick={onMoveUp}  disabled={readOnly || isFirst}  className="text-gray-300 hover:text-gray-500 disabled:opacity-20 leading-none">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" /></svg>
           </button>
-          <button type="button" onClick={onMoveDown} disabled={isLast}  className="text-gray-300 hover:text-gray-500 disabled:opacity-20 leading-none">
+          <button type="button" onClick={onMoveDown} disabled={readOnly || isLast}  className="text-gray-300 hover:text-gray-500 disabled:opacity-20 leading-none">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
           </button>
         </div>
 
-        <span className="text-xs text-gray-400 w-5 flex-shrink-0 text-center">{index + 1}</span>
+        <span className="text-xs font-medium text-gray-500 w-6 flex-shrink-0 text-center tabular-nums">{index + 1}</span>
 
-        {/* Key + label quick edit */}
-        <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
+        {/* Label only — keys are assigned automatically */}
+        <div className="flex-1 min-w-0">
           <input
             type="text"
-            placeholder="key (camelCase)"
-            className={`${inp()} text-xs`}
-            value={field.key}
-            disabled={isSystemField}
-            onChange={(e) => upd({ key: e.target.value.replace(/\s/g, '') })}
-          />
-          <input
-            type="text"
-            placeholder="Display label *"
-            className={`${inp()} text-xs`}
+            placeholder="Field label *"
+            className={`${inp()} text-sm`}
             value={field.label}
+            disabled={readOnly}
             onChange={(e) => upd({ label: e.target.value })}
           />
         </div>
@@ -111,6 +117,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
         <button
           type="button"
           onClick={() => upd({ required: !field.required })}
+          disabled={readOnly}
           className={`text-xs px-2 py-0.5 rounded-full font-medium border transition flex-shrink-0 ${
             field.required
               ? 'bg-red-50 border-red-300 text-red-600'
@@ -128,7 +135,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
         </button>
 
         {/* Remove */}
-        {!isSystemField && (
+        {!isSystemField && !readOnly && (
           <button type="button" onClick={onRemove} className="text-red-300 hover:text-red-500 flex-shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -142,7 +149,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
         <div className="border-t border-gray-100 p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <div>
             <label className={lbl}>Field Type</label>
-            <select className={inp()} value={field.fieldType} disabled={isSystemField}
+            <select className={inp()} value={field.fieldType} disabled={lockKey}
               onChange={(e) => upd({ fieldType: e.target.value as FieldType, options: [] })}>
               {FIELD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label} — {t.hint}</option>)}
             </select>
@@ -150,7 +157,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
 
           <div>
             <label className={lbl}>Section</label>
-            <select className={inp()} value={field.section} disabled={isSystemField}
+            <select className={inp()} value={field.section} disabled={lockKey}
               onChange={(e) => upd({ section: e.target.value as FieldSection })}>
               {SECTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
@@ -159,18 +166,21 @@ const FieldRow: React.FC<FieldRowProps> = ({
           <div>
             <label className={lbl}>Placeholder</label>
             <input type="text" className={inp()} value={field.placeholder || ''} placeholder="Hint text inside input"
+              disabled={readOnly}
               onChange={(e) => upd({ placeholder: e.target.value })} />
           </div>
 
           <div>
             <label className={lbl}>Default Value</label>
             <input type="text" className={inp()} value={field.defaultValue || ''} placeholder="Pre-filled value"
+              disabled={readOnly}
               onChange={(e) => upd({ defaultValue: e.target.value })} />
           </div>
 
           <div>
             <label className={lbl}>Help Text</label>
             <input type="text" className={inp()} value={field.helpText || ''} placeholder="Helper text below field"
+              disabled={readOnly}
               onChange={(e) => upd({ helpText: e.target.value })} />
           </div>
 
@@ -178,6 +188,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
             <div>
               <label className={lbl}>Max Length</label>
               <input type="number" className={inp()} value={field.maxLength || ''} min={1} max={50000} placeholder="e.g. 300"
+                disabled={readOnly}
                 onChange={(e) => upd({ maxLength: e.target.value ? Number(e.target.value) : undefined })} />
             </div>
           )}
@@ -187,11 +198,13 @@ const FieldRow: React.FC<FieldRowProps> = ({
               <div>
                 <label className={lbl}>Min Value</label>
                 <input type="number" className={inp()} value={field.min ?? ''} placeholder="Minimum"
+                  disabled={readOnly}
                   onChange={(e) => upd({ min: e.target.value ? Number(e.target.value) : undefined })} />
               </div>
               <div>
                 <label className={lbl}>Max Value</label>
                 <input type="number" className={inp()} value={field.max ?? ''} placeholder="Maximum"
+                  disabled={readOnly}
                   onChange={(e) => upd({ max: e.target.value ? Number(e.target.value) : undefined })} />
               </div>
             </>
@@ -204,7 +217,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
                 {(field.options || []).map((opt, i) => (
                   <span key={i} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full border border-blue-200">
                     {opt}
-                    <button type="button" onClick={() => removeOption(i)} className="text-blue-400 hover:text-blue-600 ml-1">
+                    <button type="button" onClick={() => removeOption(i)} disabled={readOnly} className="text-blue-400 hover:text-blue-600 ml-1 disabled:opacity-40">
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                     </button>
                   </span>
@@ -212,9 +225,10 @@ const FieldRow: React.FC<FieldRowProps> = ({
               </div>
               <div className="flex gap-2">
                 <input type="text" className={`${inp()} flex-1`} value={optionInput} placeholder="Add option..."
+                  disabled={readOnly}
                   onChange={(e) => setOptionInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOption(); } }} />
-                <button type="button" onClick={addOption} disabled={!optionInput.trim()}
+                <button type="button" onClick={addOption} disabled={!optionInput.trim() || readOnly}
                   className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg disabled:opacity-40 hover:bg-blue-700 transition">
                   Add
                 </button>
@@ -222,10 +236,10 @@ const FieldRow: React.FC<FieldRowProps> = ({
             </div>
           )}
 
-          {isSystemField && (
+          {isSystemField && !readOnly && (
             <div className="sm:col-span-2 lg:col-span-3">
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                This is a system field. Key and type are locked but label, placeholder, and help text can be customized.
+                This is a system field. Type and section are locked; you can still edit the label, placeholder, and help text.
               </p>
             </div>
           )}
@@ -241,13 +255,14 @@ interface FieldBuilderProps {
   fields: FieldSpec[];
   onChange: (fields: FieldSpec[]) => void;
   systemFieldKeys?: string[];   // keys that are locked
+  readOnly?: boolean;
 }
 
-export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, systemFieldKeys = [] }) => {
+export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, systemFieldKeys = [], readOnly }) => {
   const add = () => {
     const newField: FieldSpec = {
       ...EMPTY_FIELD,
-      key:   `customField${fields.length + 1}`,
+      key:   nextCustomFieldKey(fields),
       order: fields.length,
     };
     onChange([...fields, newField]);
@@ -277,17 +292,18 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, sy
 
   // Group by section for display
   const sections = SECTIONS.filter((s) => fields.some((f) => f.section === s.value));
-  const ungrouped = fields.filter((f) => !SECTIONS.some((s) => s.value === f.section));
 
   return (
     <div className="space-y-4">
       {fields.length === 0 ? (
         <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
           <p className="text-sm text-gray-400 mb-3">No fields defined yet</p>
-          <button type="button" onClick={add}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
-            + Add First Field
-          </button>
+          {!readOnly && (
+            <button type="button" onClick={add}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
+              + Add First Field
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -305,14 +321,17 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, sy
                 isFirst={idx === 0}
                 isLast={idx === fields.length - 1}
                 isSystemField={systemFieldKeys.includes(field.key)}
+                readOnly={readOnly}
               />
             ))}
           </div>
 
-          <button type="button" onClick={add}
-            className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/30 transition font-medium">
-            + Add Custom Field
-          </button>
+          {!readOnly && (
+            <button type="button" onClick={add}
+              className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/30 transition font-medium">
+              + Add Custom Field
+            </button>
+          )}
         </>
       )}
 
