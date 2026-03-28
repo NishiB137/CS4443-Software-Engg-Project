@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { FieldSpec, FieldType, FieldSection, TemplateLayout } from '@/services/api';
 import { withDefaultLayout } from '@/shared/template/systemFields';
 
@@ -54,17 +54,14 @@ interface FieldRowProps {
   index: number;
   onUpdate: (f: FieldSpec) => void;
   onRemove: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  isFirst: boolean;
-  isLast: boolean;
   isSystemField: boolean;
   isNew?: boolean;
   readOnly?: boolean;
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
 }
 
 const FieldRow: React.FC<FieldRowProps> = ({
-  field, index, onUpdate, onRemove, onMoveUp, onMoveDown, isFirst, isLast, isSystemField, isNew, readOnly,
+  field, index, onUpdate, onRemove, isSystemField, isNew, readOnly, dragHandleProps,
 }) => {
   const lockKey = readOnly || isSystemField;
   const [expanded, setExpanded] = useState(false);
@@ -88,15 +85,21 @@ const FieldRow: React.FC<FieldRowProps> = ({
     }`}>
       {/* Row header */}
       <div className="flex items-center gap-2 px-3 py-2.5">
-        {/* Reorder */}
-        <div className="flex flex-col gap-0.5 flex-shrink-0">
-          <button type="button" onClick={onMoveUp}  disabled={readOnly || isFirst}  className="text-gray-300 hover:text-gray-500 disabled:opacity-20 leading-none">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" /></svg>
-          </button>
-          <button type="button" onClick={onMoveDown} disabled={readOnly || isLast}  className="text-gray-300 hover:text-gray-500 disabled:opacity-20 leading-none">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
-          </button>
-        </div>
+        {/* Drag handle */}
+        <button
+          type="button"
+          {...dragHandleProps}
+          className={`flex-shrink-0 rounded-lg p-1.5 border transition ${
+            readOnly ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 active:bg-gray-100 cursor-grab'
+          }`}
+          aria-label={readOnly ? 'Reorder disabled' : 'Drag to reorder'}
+          title={readOnly ? undefined : 'Drag to reorder'}
+          disabled={readOnly}
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01" />
+          </svg>
+        </button>
 
         <span className="text-xs font-medium text-gray-500 w-6 flex-shrink-0 text-center tabular-nums">{index + 1}</span>
 
@@ -275,16 +278,26 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
   const [newKeys, setNewKeys] = useState<Record<string, true>>({});
   const [activeForm, setActiveForm] = useState<string>(''); // set lazily from computed forms
   const [collapsedCats, setCollapsedCats] = useState<Record<string, true>>({});
+  const [movePicker, setMovePicker] = useState<{ openFor: string | null }>({ openFor: null });
+
+  // Track drag start/target for stable reordering (works even when clicking inputs).
+  const [dragState, setDragState] = useState<{
+    type: 'field' | 'category' | 'form' | null;
+    fromForm?: string;
+    fromCategory?: string;
+    fromIndex?: number;
+  }>({ type: null });
 
   const [nameDialog, setNameDialog] = useState<{
     open: boolean;
     title: string;
     initial: string;
+    value: string;
     onSubmit?: (value: string) => void;
-  }>({ open: false, title: '', initial: '' });
+  }>({ open: false, title: '', initial: '', value: '' });
 
   const openNameDialog = (title: string, initial: string, onSubmit: (value: string) => void) =>
-    setNameDialog({ open: true, title, initial, onSubmit });
+    setNameDialog({ open: true, title, initial, value: initial, onSubmit });
 
   const normalized = useMemo(() => fields.map(withDefaultLayout), [fields]);
 
@@ -342,12 +355,29 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
     return out;
   }, [forms]);
 
-  const ensureActiveForm = () => {
+  const resolvedActiveForm = useMemo(() => {
     if (activeForm && forms.some((f) => f.name === activeForm)) return activeForm;
-    const first = forms[0]?.name ?? 'Basic Info';
-    setActiveForm(first);
-    return first;
-  };
+    return forms[0]?.name ?? 'Basic Info';
+  }, [activeForm, forms]);
+
+  useEffect(() => {
+    // Avoid setState during render: keep active form in sync with layout changes.
+    if (!activeForm || !forms.some((f) => f.name === activeForm)) {
+      setActiveForm(forms[0]?.name ?? 'Basic Info');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forms.map((f) => f.name).join('|')]);
+
+  useEffect(() => {
+    const close = () => setMovePicker({ openFor: null });
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('click', close);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
 
   const updateFieldAt = (idx: number, f: FieldSpec) => {
     const next = [...fields];
@@ -369,9 +399,13 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
     if (!from || !to) return;
 
     const next = [...fields];
-    const tmpOrder = next[from.idx].order;
-    next[from.idx] = { ...next[from.idx], order: next[to.idx].order };
-    next[to.idx]   = { ...next[to.idx],   order: tmpOrder };
+    // Reassign sequential order for the whole group to avoid duplicates/gaps.
+    const reordered = group.slice();
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    reordered.forEach((it, newOrder) => {
+      next[it.idx] = { ...next[it.idx], order: newOrder };
+    });
     onChange(next);
   };
 
@@ -534,7 +568,7 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl flex-wrap">
               {forms.map((f, idx) => {
-                const selected = ensureActiveForm() === f.name;
+                const selected = resolvedActiveForm === f.name;
                 return (
                   <div key={f.name} className="flex items-center gap-1">
                     <button
@@ -578,7 +612,7 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
 
           {/* Active form content */}
           <div className="space-y-4">
-            {extraFormContent?.[ensureActiveForm()] ?? null}
+            {extraFormContent?.[resolvedActiveForm] ?? null}
 
             {/* Categories */}
             <div className="flex items-center justify-between">
@@ -587,25 +621,25 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                 <p className="text-xs text-gray-400">Reorder by dragging category cards</p>
               </div>
               {!readOnly && !!onLayoutChange && (
-                <button type="button" onClick={() => addCategory(ensureActiveForm())} className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700">
+                <button type="button" onClick={() => addCategory(resolvedActiveForm)} className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700">
                   + Category
                 </button>
               )}
             </div>
 
             <div className="space-y-3">
-              {(categoriesByForm.get(ensureActiveForm()) ?? []).map((cat, catIdx) => {
+              {(categoriesByForm.get(resolvedActiveForm) ?? []).map((cat, catIdx) => {
                 const group = normalized
                   .map((f, idx) => ({ f, idx }))
-                  .filter(({ f }) => (f.form ?? 'Basic Info') === ensureActiveForm() && (f.category ?? 'General') === cat.name)
+                  .filter(({ f }) => (f.form ?? 'Basic Info') === resolvedActiveForm && (f.category ?? 'General') === cat.name)
                   .sort((a, b) => (a.f.order ?? 0) - (b.f.order ?? 0));
-                const catKey = `${ensureActiveForm()}::${cat.name}`;
+                const catKey = `${resolvedActiveForm}::${cat.name}`;
                 const collapsed = !!collapsedCats[catKey];
                 const categoryExtra = extraCategoryContent?.[catKey];
 
                 return (
                   <div
-                    key={`${ensureActiveForm()}::${cat.name}`}
+                    key={`${resolvedActiveForm}::${cat.name}`}
                     className="border border-gray-200 rounded-xl overflow-hidden bg-white"
                     draggable={!readOnly && !!onLayoutChange}
                     onDragStart={(e) => { if (!onLayoutChange) return; e.dataTransfer.setData('text/plain', String(catIdx)); }}
@@ -615,7 +649,7 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                       e.preventDefault();
                       const from = Number(e.dataTransfer.getData('text/plain'));
                       if (!Number.isFinite(from)) return;
-                      reorderCategories(ensureActiveForm(), from, catIdx);
+                      reorderCategories(resolvedActiveForm, from, catIdx);
                     }}
                     title={!readOnly && onLayoutChange ? 'Drag to reorder category' : undefined}
                   >
@@ -636,20 +670,52 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
 
                       {!readOnly && !!onLayoutChange && (
                         <>
-                          <button type="button" onClick={() => renameCategory(ensureActiveForm(), cat.name)} className="px-2.5 py-1.5 text-xs font-semibold border border-gray-300 rounded-lg hover:bg-gray-50">
+                          <button type="button" onClick={() => renameCategory(resolvedActiveForm, cat.name)} className="px-2.5 py-1.5 text-xs font-semibold border border-gray-300 rounded-lg hover:bg-gray-50">
                             Rename
                           </button>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-gray-400">Move</span>
-                            <select
-                              className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white"
-                              value={ensureActiveForm()}
-                              onChange={(e) => moveCategoryToForm(ensureActiveForm(), cat.name, e.target.value)}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMovePicker((p) => ({ openFor: p.openFor === catKey ? null : catKey }));
+                              }}
+                              className="px-2.5 py-1.5 text-xs font-semibold border border-gray-300 rounded-lg hover:bg-gray-50"
                             >
-                              {forms.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
-                            </select>
+                              Move
+                            </button>
+                            {movePicker.openFor === catKey && (
+                              <div
+                                className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-10"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100">
+                                  Move to form
+                                </div>
+                                <div className="p-1">
+                                  {forms
+                                    .filter((f) => f.name !== resolvedActiveForm)
+                                    .map((f) => (
+                                      <button
+                                        key={f.name}
+                                        type="button"
+                                        className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50"
+                                        onClick={() => {
+                                          moveCategoryToForm(resolvedActiveForm, cat.name, f.name);
+                                          setMovePicker({ openFor: null });
+                                        }}
+                                      >
+                                        {f.name}
+                                      </button>
+                                    ))}
+                                  {forms.filter((f) => f.name !== resolvedActiveForm).length === 0 && (
+                                    <div className="px-3 py-2 text-sm text-gray-400">No other forms</div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <button type="button" onClick={() => addToCategory(ensureActiveForm(), cat.name)} className="px-2.5 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                          <button type="button" onClick={() => addToCategory(resolvedActiveForm, cat.name)} className="px-2.5 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                             + Field
                           </button>
                         </>
@@ -667,47 +733,50 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                         {group.map(({ f, idx }, i) => (
                           <div
                             key={`${f.key}-${idx}`}
-                            draggable={!readOnly}
-                            onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(i)); }}
-                            onDragOver={(e) => { if (!readOnly) e.preventDefault(); }}
-                            onDrop={(e) => {
-                              if (readOnly) return;
-                              e.preventDefault();
-                              const from = Number(e.dataTransfer.getData('text/plain'));
-                              if (!Number.isFinite(from)) return;
-                              const to = i;
-                              if (from === to) return;
-
-                              const groupItems = fields
-                                .map(withDefaultLayout)
-                                .map((ff, fidx) => ({ ff, fidx }))
-                                .filter(({ ff }) => (ff.form ?? 'Basic Info') === ensureActiveForm() && (ff.category ?? 'General') === cat.name)
-                                .sort((a, b) => (a.ff.order ?? 0) - (b.ff.order ?? 0));
-
-                              const reordered = groupItems.slice();
-                              const [moved] = reordered.splice(from, 1);
-                              reordered.splice(to, 0, moved);
-
-                              const next = [...fields];
-                              reordered.forEach((it, newOrder) => {
-                                next[it.fidx] = { ...next[it.fidx], order: newOrder };
-                              });
-                              onChange(next);
-                            }}
-                            title={readOnly ? undefined : 'Drag to reorder'}
                           >
                             <FieldRow
                               field={f}
                               index={i}
                               onUpdate={(nf) => updateFieldAt(idx, nf)}
                               onRemove={() => removeAt(idx)}
-                              onMoveUp={() => reorderWithinGroup(ensureActiveForm(), cat.name, i, i - 1)}
-                              onMoveDown={() => reorderWithinGroup(ensureActiveForm(), cat.name, i, i + 1)}
-                              isFirst={i === 0}
-                              isLast={i === group.length - 1}
                               isSystemField={systemFieldKeys.includes(f.key)}
                               isNew={!!newKeys[f.key]}
                               readOnly={readOnly}
+                              dragHandleProps={{
+                                draggable: !readOnly,
+                                onDragStart: (e) => {
+                                  if (readOnly) return;
+                                  e.dataTransfer.setData('application/json', JSON.stringify({
+                                    type: 'field',
+                                    fromForm: resolvedActiveForm,
+                                    fromCategory: cat.name,
+                                    fromIndex: i,
+                                  }));
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  setDragState({ type: 'field', fromForm: resolvedActiveForm, fromCategory: cat.name, fromIndex: i });
+                                },
+                                onDragOver: (e) => {
+                                  if (readOnly) return;
+                                  e.preventDefault();
+                                  e.dataTransfer.dropEffect = 'move';
+                                },
+                                onDrop: (e) => {
+                                  if (readOnly) return;
+                                  e.preventDefault();
+                                  const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+                                  let payload: any = null;
+                                  try { payload = JSON.parse(raw); } catch { payload = null; }
+                                  const from = payload?.type === 'field' ? Number(payload.fromIndex) : dragState.type === 'field' ? dragState.fromIndex : NaN;
+                                  const fromForm = payload?.fromForm ?? dragState.fromForm;
+                                  const fromCategory = payload?.fromCategory ?? dragState.fromCategory;
+                                  if (!Number.isFinite(from) || fromForm !== resolvedActiveForm || fromCategory !== cat.name) return;
+                                  const to = i;
+                                  if (from === to) return;
+                                  reorderWithinGroup(resolvedActiveForm, cat.name, from, to);
+                                  setDragState({ type: null });
+                                },
+                                onDragEnd: () => setDragState({ type: null }),
+                              }}
                             />
                           </div>
                         ))}
@@ -734,21 +803,21 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
             <input
               type="text"
               className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none"
-              defaultValue={nameDialog.initial}
+              value={nameDialog.value}
               autoFocus
+              onChange={(e) => setNameDialog((p) => ({ ...p, value: e.target.value }))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  const v = (e.target as HTMLInputElement).value;
-                  nameDialog.onSubmit?.(v);
-                  setNameDialog({ open: false, title: '', initial: '' });
+                  nameDialog.onSubmit?.(nameDialog.value);
+                  setNameDialog({ open: false, title: '', initial: '', value: '' });
                 }
-                if (e.key === 'Escape') setNameDialog({ open: false, title: '', initial: '' });
+                if (e.key === 'Escape') setNameDialog({ open: false, title: '', initial: '', value: '' });
               }}
             />
             <div className="flex gap-2 mt-4">
               <button
                 type="button"
-                onClick={() => setNameDialog({ open: false, title: '', initial: '' })}
+                onClick={() => setNameDialog({ open: false, title: '', initial: '', value: '' })}
                 className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
               >
                 Cancel
@@ -756,11 +825,8 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
               <button
                 type="button"
                 onClick={() => {
-                  const input = document.activeElement?.tagName === 'INPUT'
-                    ? (document.activeElement as HTMLInputElement).value
-                    : nameDialog.initial;
-                  nameDialog.onSubmit?.(input);
-                  setNameDialog({ open: false, title: '', initial: '' });
+                  nameDialog.onSubmit?.(nameDialog.value);
+                  setNameDialog({ open: false, title: '', initial: '', value: '' });
                 }}
                 className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
               >

@@ -43,7 +43,13 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
     name: '', description: '', eventType: 'other', format: 'physical',
     isFree: true, coverColor: '#2563EB', tags: [], fields: [],
     sessionTemplates: [], defaultVisibility: 'public', defaultStatus: 'draft',
-    defaultPolicies: {}, allowsSubEvents: true, maxSubEventDepth: 1,
+    defaultPolicies: {
+      refundPolicy: 'no_refund',
+      attendeeMinAge: 0,
+      cancellationPolicy: 'Cancellations are handled by the organizer. Please contact the organizer for changes or refunds.',
+    },
+    allowsSubEvents: true,
+    maxSubEventDepth: 1,
     layout: { forms: [] },
   });
 
