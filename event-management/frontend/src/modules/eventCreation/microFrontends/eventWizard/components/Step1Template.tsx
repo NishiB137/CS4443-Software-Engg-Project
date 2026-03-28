@@ -4,6 +4,7 @@ import type { WizardStepProps } from '@/modules/eventCreation/microFrontends/eve
 import { templateApi } from '@/services/api';
 import type { ApiTemplate } from '@/services/api';
 import { EMPTY_SESSION } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
+import { mergeSystemFields } from '@/shared/template/systemFields';
 
 // ─── Format badge ─────────────────────────────────────────────────────────────
 const FormatBadge: React.FC<{ format: string; active: boolean }> = ({ format, active }) => {
@@ -102,9 +103,11 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
   }, []);
 
   const handleSelect = (tpl: ApiTemplate) => {
+    const mergedFields = mergeSystemFields(tpl.fields ?? []);
+
     // Build default values for template custom fields
     const customFieldDefaults = Object.fromEntries(
-      (tpl.fields ?? [])
+      mergedFields
         .filter((f) => f.section === 'custom')
         .map((f) => [f.key, f.defaultValue ?? ''])
     );
@@ -112,7 +115,7 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
     updateData({
       template:   tpl._id,
       templateName: tpl.name,
-      templateFields: tpl.fields ?? [],
+      templateFields: mergedFields,
       sessionTemplates: (tpl.sessionTemplates ?? []).map((s) => ({
         title: s.title,
         sessionType: s.sessionType,
@@ -124,7 +127,7 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
         ...EMPTY_SESSION,
         title: s.title,
         description: s.description ?? '',
-        sessionType: (s.sessionType as any) ?? 'other',
+        sessionType: (s.sessionType as typeof EMPTY_SESSION.sessionType) ?? 'other',
       })),
       customFieldValues: customFieldDefaults,
       eventType:  tpl.eventType,

@@ -9,14 +9,31 @@ const param = (req: Request, key: string): string =>
 // GET /api/templates
 export const listTemplates = async (req: Request, res: Response) => {
   try {
-    const { isDefault, eventType, organization, createdBy } = req.query;
-    const templates = await templateService.listTemplates({
-      isDefault:    isDefault === 'true' ? true : isDefault === 'false' ? false : undefined,
-      eventType:    typeof eventType    === 'string' ? eventType    : undefined,
-      organization: typeof organization === 'string' ? organization : undefined,
-      createdBy:    typeof createdBy    === 'string' ? createdBy    : undefined,
-    });
+    const { isDefault, eventType, organization, createdBy, q, kind, format, tag } = req.query;
+    const filter: Parameters<typeof templateService.listTemplates>[0] = {};
+
+    if (isDefault === 'true') filter.isDefault = true;
+    if (isDefault === 'false') filter.isDefault = false;
+    if (typeof eventType === 'string') filter.eventType = eventType;
+    if (typeof organization === 'string') filter.organization = organization;
+    if (typeof createdBy === 'string') filter.createdBy = createdBy;
+    if (typeof q === 'string') filter.q = q;
+    if (typeof kind === 'string') filter.kind = kind;
+    if (typeof format === 'string') filter.format = format;
+    if (typeof tag === 'string') filter.tag = tag;
+
+    const templates = await templateService.listTemplates(filter);
     res.json({ success: true, data: templates });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err instanceof Error ? err.message : 'Server error' });
+  }
+};
+
+// GET /api/templates/filters
+export const listTemplateFilters = async (_req: Request, res: Response) => {
+  try {
+    const filters = await templateService.getTemplateFilters();
+    res.json({ success: true, data: filters });
   } catch (err) {
     res.status(500).json({ success: false, message: err instanceof Error ? err.message : 'Server error' });
   }

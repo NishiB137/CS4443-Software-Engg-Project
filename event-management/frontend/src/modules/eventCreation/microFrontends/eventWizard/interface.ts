@@ -221,7 +221,7 @@ export const validateStep2 = (data: EventFormData): StepErrors => {
   return errors;
 };
 
-export const validateStep3 = (_: EventFormData): StepErrors => ({});
+export const validateStep3 = (): StepErrors => ({});
 
 export const validateStep4 = (data: EventFormData): StepErrors => {
   const errors: StepErrors = {};

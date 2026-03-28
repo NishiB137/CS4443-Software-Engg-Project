@@ -3,6 +3,7 @@ import * as tc from '../controllers/templateController.js';
 
 const router = Router();
 
+router.get('/filters',        tc.listTemplateFilters);
 router.get('/',               tc.listTemplates);
 router.post('/',              tc.createTemplate);
 router.get('/:id',            tc.getTemplate);

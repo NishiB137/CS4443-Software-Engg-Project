@@ -22,6 +22,11 @@ export interface IFieldSpec {
   maxLength?: number;    // for text / textarea
   section: 'basics' | 'datetime' | 'venue' | 'capacity' | 'policies' | 'media' | 'custom';
   order: number;         // display order within section
+  /** Optional layout metadata for grouping fields in the builder & wizard. */
+  form?: string;         // e.g. "Basic Info", "About this event"
+  category?: string;     // e.g. "Venue", "Capacity"
+  formOrder?: number;    // ordering between forms
+  categoryOrder?: number;// ordering between categories (within a form)
 }
 
 // ─── Session template ─────────────────────────────────────────────────────────
@@ -47,6 +52,18 @@ export interface IEventTemplate extends Document {
 
   // Fields shown in the event creation wizard
   fields: IFieldSpec[];
+
+  /** Optional saved layout for form/category grouping (allows empty forms/categories). */
+  layout?: {
+    forms: Array<{
+      name: string;
+      order: number;
+      categories: Array<{
+        name: string;
+        order: number;
+      }>;
+    }>;
+  };
 
   // Default visibility / lifecycle
   defaultVisibility: string;
@@ -89,6 +106,10 @@ const FieldSpecSchema = new Schema<IFieldSpec>({
   maxLength:    { type: Number },
   section:      { type: String, enum: ['basics','datetime','venue','capacity','policies','media','custom'], default: 'basics' },
   order:        { type: Number, default: 0 },
+  form:         { type: String },
+  category:     { type: String },
+  formOrder:    { type: Number },
+  categoryOrder:{ type: Number },
 }, { _id: false });
 
 const SessionTemplateSchema = new Schema<ISessionTemplate>({
@@ -97,6 +118,21 @@ const SessionTemplateSchema = new Schema<ISessionTemplate>({
   defaultDurationMinutes: { type: Number, default: 60 },
   description:            { type: String },
   defaultFields:          [FieldSpecSchema],
+}, { _id: false });
+
+const LayoutCategorySchema = new Schema<{ name: string; order: number }>({
+  name:  { type: String, required: true },
+  order: { type: Number, default: 0 },
+}, { _id: false });
+
+const LayoutFormSchema = new Schema<{ name: string; order: number; categories: Array<{ name: string; order: number }> }>({
+  name:       { type: String, required: true },
+  order:      { type: Number, default: 0 },
+  categories: { type: [LayoutCategorySchema], default: [] },
+}, { _id: false });
+
+const TemplateLayoutSchema = new Schema<{ forms: Array<{ name: string; order: number; categories: Array<{ name: string; order: number }> }> }>({
+  forms: { type: [LayoutFormSchema], default: [] },
 }, { _id: false });
 
 const EventTemplateSchema = new Schema<IEventTemplate>({
@@ -113,6 +149,7 @@ const EventTemplateSchema = new Schema<IEventTemplate>({
   organization: { type: Schema.Types.ObjectId, ref: 'Organization' },
 
   fields: [FieldSpecSchema],
+  layout: { type: TemplateLayoutSchema, required: false },
 
   defaultVisibility: { type: String, default: 'public' },
   defaultStatus:     { type: String, default: 'draft' },

@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { templateApi } from '@/services/api';
-import type { ApiTemplate, FieldSpec, SessionTemplate } from '@/services/api';
+import type { ApiTemplate, FieldSpec, SessionTemplate, TemplateLayout } from '@/services/api';
 import { FieldBuilder } from './FieldBuilder';
 import { SessionTemplateBuilder } from './SessionTemplateBuilder';
+import { mergeSystemFields, SYSTEM_FIELD_KEYS } from '@/shared/template/systemFields';
+import { deriveLayoutFromFields, ensurePoliciesCategory } from '@/shared/template/layout';
 
 const EVENT_TYPES = [
   { value: 'conference', label: 'Conference' }, { value: 'workshop', label: 'Workshop' },
@@ -13,12 +15,7 @@ const EVENT_TYPES = [
   { value: 'webinar', label: 'Webinar' },       { value: 'other', label: 'Other' },
 ];
 
-const COLORS = [
-  '#2563EB','#059669','#7C3AED','#DC2626','#D97706',
-  '#0F172A','#0891B2','#BE185D','#16A34A','#EA580C',
-];
-
-const TABS = ['Basic Info', 'Fields', 'Session Templates', 'Advanced'] as const;
+const TABS = ['Basic Info', 'Fields', 'Session Templates'] as const;
 type Tab = typeof TABS[number];
 
 const inp = (err?: boolean) =>
@@ -47,6 +44,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
     isFree: true, coverColor: '#2563EB', tags: [], fields: [],
     sessionTemplates: [], defaultVisibility: 'public', defaultStatus: 'draft',
     defaultPolicies: {}, allowsSubEvents: true, maxSubEventDepth: 1,
+    layout: { forms: [] },
   });
 
   // Load existing template — default templates cannot use /edit (redirect to view-only route)
@@ -57,11 +55,22 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
         navigate(`/templates/${templateId}`, { replace: true });
         return;
       }
-      setForm(res.data);
+      const mergedFields = mergeSystemFields((res.data.fields || []) as FieldSpec[]);
+      const derivedLayout = ensurePoliciesCategory(res.data.layout ?? deriveLayoutFromFields(mergedFields));
+      setForm({ ...res.data, fields: mergedFields, layout: derivedLayout });
     }).catch((e) => setLoadError(e.message));
   }, [templateId, readOnly, navigate]);
 
   const upd = (patch: Partial<ApiTemplate>) => setForm((p) => ({ ...p, ...patch }));
+
+  const fields = useMemo(
+    () => mergeSystemFields((form.fields || []) as FieldSpec[]),
+    [form.fields]
+  );
+  const layout: TemplateLayout = useMemo(
+    () => ensurePoliciesCategory(form.layout ?? deriveLayoutFromFields(fields)),
+    [form.layout, fields]
+  );
 
   const [tagInput, setTagInput] = useState('');
   const addTag = () => {
@@ -232,23 +241,6 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
             </div>
           </div>
 
-          {/* Cover colour */}
-          <div>
-            <label className={lbl}>Template Colour</label>
-            <div className="flex items-center gap-3 flex-wrap">
-              {COLORS.map((c) => (
-                <button key={c} type="button" onClick={() => upd({ coverColor: c })} disabled={viewOnly}
-                  className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 disabled:opacity-50 disabled:pointer-events-none ${
-                    form.coverColor === c ? 'border-gray-900 scale-110' : 'border-transparent'
-                  }`} style={{ backgroundColor: c }} />
-              ))}
-              <input type="color" value={form.coverColor || '#2563EB'} disabled={viewOnly}
-                onChange={(e) => upd({ coverColor: e.target.value })}
-                className="w-8 h-8 rounded-full border-2 border-gray-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" title="Custom colour" />
-              <span className="text-xs text-gray-400">or pick custom</span>
-            </div>
-          </div>
-
           {/* Tags */}
           <div>
             <label className={lbl}>Tags</label>
@@ -291,8 +283,79 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
             </span>
           </div>
           <FieldBuilder
-            fields={(form.fields || []) as FieldSpec[]}
-            onChange={(fields) => upd({ fields: fields as ApiTemplate['fields'] })}
+            fields={fields}
+            layout={layout}
+            onLayoutChange={(nextLayout) => upd({ layout: nextLayout })}
+            onChange={(nextFields) => upd({ fields: nextFields as ApiTemplate['fields'] })}
+            systemFieldKeys={SYSTEM_FIELD_KEYS}
+            extraCategoryContent={{
+              'About this event::Policies': (
+                <div className="space-y-5">
+                  <div className="bg-white border border-gray-200 rounded-xl p-5">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4">Default Policies</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={lbl}>Default Refund Policy</label>
+                        <select className={inp()} value={form.defaultPolicies?.refundPolicy || ''} disabled={viewOnly}
+                          onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, refundPolicy: e.target.value } })}>
+                          <option value="">None / ask organizer</option>
+                          <option value="full">Full refund</option>
+                          <option value="partial">Partial refund</option>
+                          <option value="no_refund">No refund</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={lbl}>Default Minimum Attendee Age</label>
+                        <input type="number" className={inp()} min={0} max={120} disabled={viewOnly}
+                          value={form.defaultPolicies?.attendeeMinAge ?? 0}
+                          onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, attendeeMinAge: Number(e.target.value) } })} />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className={lbl}>Default Cancellation Policy</label>
+                        <textarea rows={3} className={inp()} maxLength={2000} disabled={viewOnly}
+                          value={form.defaultPolicies?.cancellationPolicy || ''}
+                          placeholder="Standard cancellation terms for this template..."
+                          onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, cancellationPolicy: e.target.value } })} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-gray-200 rounded-xl p-5">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4">Hierarchy & Structure</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">Allow Sub-Events</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Organizers can create nested sub-events under this event</p>
+                        </div>
+                        <button type="button"
+                          onClick={() => upd({ allowsSubEvents: !form.allowsSubEvents })}
+                          disabled={viewOnly}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            form.allowsSubEvents ? 'bg-blue-600' : 'bg-gray-300'
+                          } disabled:opacity-60`}>
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                            form.allowsSubEvents ? 'translate-x-6' : 'translate-x-1'
+                          }`} />
+                        </button>
+                      </div>
+
+                      {form.allowsSubEvents && (
+                        <div className="max-w-xs">
+                          <label className={lbl}>Max Sub-Event Depth (1–3)</label>
+                          <input type="number" className={inp()} min={1} max={3} value={form.maxSubEventDepth || 1}
+                            disabled={viewOnly}
+                            onChange={(e) => upd({ maxSubEventDepth: Math.min(3, Math.max(1, Number(e.target.value))) })} />
+                          <p className="text-xs text-gray-400 mt-1">
+                            1 = Event → Sub-events only · 2 = Event → Sub-events → Sub-sub-events
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ),
+            }}
             readOnly={viewOnly}
           />
         </div>
@@ -317,73 +380,6 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
         </div>
       )}
 
-      {/* ── Tab: Advanced ── */}
-      {tab === 'Advanced' && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-4">Hierarchy & Structure</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">Allow Sub-Events</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Organizers can create nested sub-events under this event</p>
-                </div>
-                <button type="button"
-                  onClick={() => upd({ allowsSubEvents: !form.allowsSubEvents })}
-                  disabled={viewOnly}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    form.allowsSubEvents ? 'bg-blue-600' : 'bg-gray-300'
-                  } disabled:opacity-60`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                    form.allowsSubEvents ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
-              </div>
-
-              {form.allowsSubEvents && (
-                <div className="max-w-xs">
-                  <label className={lbl}>Max Sub-Event Depth (1–3)</label>
-                  <input type="number" className={inp()} min={1} max={3} value={form.maxSubEventDepth || 1}
-                    disabled={viewOnly}
-                    onChange={(e) => upd({ maxSubEventDepth: Math.min(3, Math.max(1, Number(e.target.value))) })} />
-                  <p className="text-xs text-gray-400 mt-1">
-                    1 = Event → Sub-events only · 2 = Event → Sub-events → Sub-sub-events
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-4">Default Policies</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={lbl}>Default Refund Policy</label>
-                <select className={inp()} value={form.defaultPolicies?.refundPolicy || ''} disabled={viewOnly}
-                  onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, refundPolicy: e.target.value } })}>
-                  <option value="">None / ask organizer</option>
-                  <option value="full">Full refund</option>
-                  <option value="partial">Partial refund</option>
-                  <option value="no_refund">No refund</option>
-                </select>
-              </div>
-              <div>
-                <label className={lbl}>Default Minimum Attendee Age</label>
-                <input type="number" className={inp()} min={0} max={120} disabled={viewOnly}
-                  value={form.defaultPolicies?.attendeeMinAge ?? 0}
-                  onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, attendeeMinAge: Number(e.target.value) } })} />
-              </div>
-              <div className="md:col-span-2">
-                <label className={lbl}>Default Cancellation Policy</label>
-                <textarea rows={3} className={inp()} maxLength={2000} disabled={viewOnly}
-                  value={form.defaultPolicies?.cancellationPolicy || ''}
-                  placeholder="Standard cancellation terms for this template..."
-                  onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, cancellationPolicy: e.target.value } })} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { WizardStepProps } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import { LIMITS, todayDate } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
+import { mergeSystemFields } from '@/shared/template/systemFields';
 
 const EVENT_TYPES = [
   { value: 'conference',  label: 'Conference' },
@@ -106,14 +107,21 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
   const isHybrid       = data.format === 'hybrid';
   const needsOnlineLink = isVirtual || isHybrid;
 
-  const templateCustomFields = (data.templateFields ?? [])
+  const templateFields = mergeSystemFields(data.templateFields ?? []);
+  const fieldKeys = new Set(templateFields.map((f) => f.key));
+
+  const templateCustomFields = templateFields
     .filter((f) => f.section === 'custom')
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-  const hasOrganizerFields = (data.templateFields ?? []).some((f) =>
+  const hasOrganizerFields = templateFields.some((f) =>
     ['organizerName', 'pocName', 'pocEmail', 'pocPhone'].includes(f.key)
   );
+
+  const hasVenueFields = templateFields.some((f) => f.section === 'venue');
+  const hasCapacity = fieldKeys.has('maxCapacity');
+  const hasDates = templateFields.some((f) => f.section === 'datetime');
 
   const updateVenue = (fields: Partial<typeof data.venue>) => {
     updateData({ venue: { ...data.venue, ...fields } });
@@ -131,7 +139,8 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
       <div className="space-y-5">
 
         {/* ── Event Name ── */}
-        <div>
+        {fieldKeys.has('title') && (
+          <div>
           <label className={labelCls}>
             Event Name <span className="text-red-500">*</span>
             <span className="text-gray-400 font-normal ml-1">({LIMITS.title.min}–{LIMITS.title.max} chars)</span>
@@ -148,10 +157,12 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
             <FieldError msg={errors['title']} />
             <CharCount current={data.title.length} max={LIMITS.title.max} />
           </div>
-        </div>
+          </div>
+        )}
 
         {/* ── Short Description ── */}
-        <div>
+        {fieldKeys.has('shortDescription') && (
+          <div>
           <label className={labelCls}>
             Short Description
             <span className="text-gray-400 font-normal ml-1">(shown on event cards)</span>
@@ -168,10 +179,12 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
             <FieldError msg={errors['shortDescription']} />
             <CharCount current={data.shortDescription.length} max={LIMITS.shortDescription.max} />
           </div>
-        </div>
+          </div>
+        )}
 
         {/* ── Full Description ── */}
-        <div>
+        {fieldKeys.has('description') && (
+          <div>
           <label className={labelCls}>
             Full Description <span className="text-red-500">*</span>
             <span className="text-gray-400 font-normal ml-1">(min {LIMITS.description.min} chars)</span>
@@ -188,11 +201,14 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
             <FieldError msg={errors['description']} />
             <CharCount current={data.description.length} max={LIMITS.description.max} />
           </div>
-        </div>
+          </div>
+        )}
 
         {/* ── Type, Format, Pricing ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
+        {(fieldKeys.has('eventType') || fieldKeys.has('format') || fieldKeys.has('isFree')) && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {fieldKeys.has('eventType') && (
+            <div>
             <label className={labelCls}>Event Type <span className="text-red-500">*</span></label>
             <select
               className={inputCls()}
@@ -203,9 +219,11 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-          </div>
+            </div>
+          )}
 
-          <div>
+          {fieldKeys.has('format') && (
+            <div>
             <label className={labelCls}>Format <span className="text-red-500">*</span></label>
             <select
               className={inputCls()}
@@ -216,9 +234,11 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
               <option value="virtual">Virtual (online)</option>
               <option value="hybrid">Hybrid</option>
             </select>
-          </div>
+            </div>
+          )}
 
-          <div>
+          {fieldKeys.has('isFree') && (
+            <div>
             <label className={labelCls}>Pricing</label>
             <div className="flex gap-2 mt-0.5">
               <button
@@ -244,11 +264,14 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
                 Paid
               </button>
             </div>
+            </div>
+          )}
           </div>
-        </div>
+        )}
 
         {/* ── Start & End Date/Time ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {hasDates && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>
               Start Date & Time <span className="text-red-500">*</span>
@@ -280,10 +303,12 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
             />
             <FieldError msg={errors['endDate']} />
           </div>
-        </div>
+          </div>
+        )}
 
         {/* ── Timezone ── */}
-        <div className="max-w-sm">
+        {fieldKeys.has('timezone') && (
+          <div className="max-w-sm">
           <label className={labelCls}>Timezone</label>
           <select
             className={inputCls()}
@@ -294,10 +319,12 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
               <option key={tz.value} value={tz.value}>{tz.label}</option>
             ))}
           </select>
-        </div>
+          </div>
+        )}
 
         {/* ── Max Capacity ── */}
-        <div className="max-w-xs">
+        {hasCapacity && (
+          <div className="max-w-xs">
           <label className={labelCls}>
             Maximum Capacity
             <span className="text-gray-400 font-normal ml-1">(1 – {LIMITS.maxCapacity.max.toLocaleString()})</span>
@@ -313,10 +340,11 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
             onChange={(e) => updateData({ maxCapacity: e.target.value })}
           />
           <FieldError msg={errors['maxCapacity']} />
-        </div>
+          </div>
+        )}
 
         {/* ── Physical Venue ── */}
-        {(data.format === 'physical' || isHybrid) && (
+        {hasVenueFields && (data.format === 'physical' || isHybrid) && (
           <div className="border border-gray-200 rounded-xl p-5 bg-gray-50/50">
             <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
               <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

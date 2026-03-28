@@ -123,6 +123,8 @@ export const SessionTemplateBuilder: React.FC<Props> = ({ sessions, onChange, re
                     <FieldBuilder
                       fields={s.defaultFields as FieldSpec[]}
                       onChange={(fields) => update(idx, { ...s, defaultFields: fields as FieldSpec[] })}
+                      // Session template fields should not expose form/category layout controls
+                      onLayoutChange={undefined}
                       readOnly={readOnly}
                     />
                   </div>

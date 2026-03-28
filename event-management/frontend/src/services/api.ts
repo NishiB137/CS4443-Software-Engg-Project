@@ -199,6 +199,10 @@ export interface FieldSpec {
   maxLength?: number;
   section: FieldSection;
   order: number;
+  form?: string;
+  category?: string;
+  formOrder?: number;
+  categoryOrder?: number;
 }
 
 export interface SessionTemplate {
@@ -207,6 +211,21 @@ export interface SessionTemplate {
   defaultDurationMinutes: number;
   description?: string;
   defaultFields: FieldSpec[];
+}
+
+export interface TemplateLayoutCategory {
+  name: string;
+  order: number;
+}
+
+export interface TemplateLayoutForm {
+  name: string;
+  order: number;
+  categories: TemplateLayoutCategory[];
+}
+
+export interface TemplateLayout {
+  forms: TemplateLayoutForm[];
 }
 
 export interface ApiTemplate {
@@ -222,6 +241,7 @@ export interface ApiTemplate {
   tags: string[];
   fields: FieldSpec[];
   sessionTemplates: SessionTemplate[];
+  layout?: TemplateLayout;
   defaultVisibility: string;
   defaultStatus: string;
   defaultPolicies: { refundPolicy?: string; cancellationPolicy?: string; attendeeMinAge?: number };
@@ -233,18 +253,37 @@ export interface ApiTemplate {
   updatedAt: string;
 }
 
+export interface TemplateFiltersResponse {
+  success: boolean;
+  data: {
+    kinds: Array<{ value: 'all' | 'default' | 'custom'; label: string; count: number }>;
+    eventTypes: Array<{ value: string; label: string; count: number }>;
+    formats: Array<{ value: string; label: string; count: number }>;
+    tags: Array<{ value: string; label: string; count: number }>;
+  };
+}
+
 export interface TemplateListResponse  { success: boolean; data: ApiTemplate[] }
 export interface TemplateSingleResponse { success: boolean; data: ApiTemplate }
 
 // ─── Template API calls ───────────────────────────────────────────────────────
 
 export const templateApi = {
-  list: (params?: { isDefault?: boolean; eventType?: string }) => {
+  list: (params?: {
+    isDefault?: boolean; // back-compat
+    kind?: 'all' | 'default' | 'custom';
+    eventType?: string;
+    format?: string;
+    tag?: string;
+    q?: string;
+  }) => {
     const qs = params
       ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()
       : '';
     return request<TemplateListResponse>(`/templates${qs}`);
   },
+
+  filters: () => request<TemplateFiltersResponse>('/templates/filters'),
 
   getById: (id: string) => request<TemplateSingleResponse>(`/templates/${id}`),
 

@@ -1,18 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTemplates } from '../hooks/useTemplates';
 import type { ApiTemplate } from '@/services/api';
-
-const EVENT_TYPE_FILTERS = [
-  { value: '', label: 'All Types' },
-  { value: 'conference', label: 'Conference' },
-  { value: 'workshop', label: 'Workshop' },
-  { value: 'hackathon', label: 'Hackathon' },
-  { value: 'concert', label: 'Concert' },
-  { value: 'webinar', label: 'Webinar' },
-  { value: 'summit', label: 'Summit' },
-  { value: 'other', label: 'Other' },
-];
 
 const FormatBadge: React.FC<{ format: string }> = ({ format }) => {
   const styles: Record<string, string> = {
@@ -221,21 +210,27 @@ const TemplateCard: React.FC<{
 };
 
 export const TemplateListPage: React.FC = () => {
-  const { templates, loading, error, reload, deleteTemplate, duplicateTemplate } = useTemplates();
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch]         = useState('');
-  const [showDefaultOnly, setShowDefaultOnly] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [kind, setKind]             = useState<'all' | 'default' | 'custom'>('all');
 
-  const filtered = templates.filter((t) => {
-    if (typeFilter && t.eventType !== typeFilter) return false;
-    if (showDefaultOnly && !t.isDefault) return false;
-    if (search && !t.name.toLowerCase().includes(search.toLowerCase()) &&
-        !t.description.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(search), 250);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
-  const systemTemplates = filtered.filter((t) => t.isDefault);
-  const customTemplates = filtered.filter((t) => !t.isDefault);
+  const queryParams = useMemo(() => ({
+    q: debouncedSearch.trim() || undefined,
+    eventType: typeFilter || undefined,
+    kind,
+  }), [debouncedSearch, typeFilter, kind]);
+
+  const { templates, loading, error, filters, reload, deleteTemplate, duplicateTemplate } = useTemplates(queryParams);
+
+  const showSplit = kind === 'all';
+  const systemTemplates = templates.filter((t) => t.isDefault);
+  const customTemplates = templates.filter((t) => !t.isDefault);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -279,23 +274,38 @@ export const TemplateListPage: React.FC = () => {
               className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none bg-white"
             />
           </div>
+          <div className="flex rounded-xl border border-gray-300 overflow-hidden bg-white">
+            {(
+              filters?.kinds ?? [
+                { value: 'all', label: 'All', count: 0 },
+                { value: 'default', label: 'Default', count: 0 },
+                { value: 'custom', label: 'Custom', count: 0 },
+              ]
+            ).map((k) => (
+              <button
+                key={k.value}
+                type="button"
+                onClick={() => setKind(k.value)}
+                className={`px-4 py-2.5 text-sm font-medium transition ${
+                  kind === k.value
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none"
           >
-            {EVENT_TYPE_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            <option value="">All Types</option>
+            {(filters?.eventTypes ?? []).map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
           </select>
-          <button
-            onClick={() => setShowDefaultOnly((v) => !v)}
-            className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition ${
-              showDefaultOnly
-                ? 'bg-amber-50 border-amber-300 text-amber-700'
-                : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
-            }`}
-          >
-            System only
-          </button>
         </div>
 
         {/* Error */}
@@ -329,7 +339,7 @@ export const TemplateListPage: React.FC = () => {
         {!loading && !error && (
           <>
             {/* System templates */}
-            {systemTemplates.length > 0 && (
+            {showSplit && systemTemplates.length > 0 && (
               <div className="mb-8">
                 <div className="flex items-center gap-2 mb-4">
                   <h2 className="text-sm font-semibold text-gray-700">System Templates</h2>
@@ -345,7 +355,7 @@ export const TemplateListPage: React.FC = () => {
             )}
 
             {/* Custom templates */}
-            {customTemplates.length > 0 && (
+            {showSplit && customTemplates.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-4">
                   <h2 className="text-sm font-semibold text-gray-700">Custom Templates</h2>
@@ -359,8 +369,16 @@ export const TemplateListPage: React.FC = () => {
               </div>
             )}
 
+            {!showSplit && templates.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {templates.map((t) => (
+                  <TemplateCard key={t._id} template={t} onDelete={deleteTemplate} onDuplicate={duplicateTemplate} />
+                ))}
+              </div>
+            )}
+
             {/* Empty state */}
-            {filtered.length === 0 && !loading && (
+            {templates.length === 0 && !loading && (
               <div className="text-center py-20">
                 <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <svg className="w-7 h-7 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -371,7 +389,7 @@ export const TemplateListPage: React.FC = () => {
                 <p className="text-sm text-gray-400 mb-5">
                   {search || typeFilter ? 'Try adjusting your filters' : 'Create your first custom template'}
                 </p>
-                {!search && !typeFilter && (
+                {!search && !typeFilter && kind !== 'default' && (
                   <Link to="/templates/new"
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
