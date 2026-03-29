@@ -6,7 +6,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export type FieldType =
   | 'text' | 'textarea' | 'number' | 'date' | 'time' | 'datetime'
-  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone';
+  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone' | 'speakers';
 
 export interface IFieldSpec {
   key: string;           // unique camelCase key, maps to EventFormData field
@@ -36,6 +36,7 @@ export interface ISessionTemplate {
   defaultDurationMinutes: number;
   description?: string;
   defaultFields: IFieldSpec[];
+  layout?: any;
 }
 
 // ─── Main interface ───────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ export interface IEventTemplate extends Document {
 const FieldSpecSchema = new Schema<IFieldSpec>({
   key:          { type: String, required: true },
   label:        { type: String, required: true },
-  fieldType:    { type: String, required: true, enum: ['text','textarea','number','date','time','datetime','select','multiselect','toggle','url','email','phone'] },
+  fieldType:    { type: String, required: true, enum: ['text','textarea','number','date','time','datetime','select','multiselect','toggle','url','email','phone','speakers'] },
   required:     { type: Boolean, default: false },
   defaultValue: { type: String },
   placeholder:  { type: String },
@@ -112,14 +113,6 @@ const FieldSpecSchema = new Schema<IFieldSpec>({
   categoryOrder:{ type: Number },
 }, { _id: false });
 
-const SessionTemplateSchema = new Schema<ISessionTemplate>({
-  title:                  { type: String, required: true },
-  sessionType:            { type: String, default: 'other' },
-  defaultDurationMinutes: { type: Number, default: 60 },
-  description:            { type: String },
-  defaultFields:          [FieldSpecSchema],
-}, { _id: false });
-
 const LayoutCategorySchema = new Schema<{ name: string; order: number }>({
   name:  { type: String, required: true },
   order: { type: Number, default: 0 },
@@ -133,6 +126,15 @@ const LayoutFormSchema = new Schema<{ name: string; order: number; categories: A
 
 const TemplateLayoutSchema = new Schema<{ forms: Array<{ name: string; order: number; categories: Array<{ name: string; order: number }> }> }>({
   forms: { type: [LayoutFormSchema], default: [] },
+}, { _id: false });
+
+const SessionTemplateSchema = new Schema<ISessionTemplate>({
+  title:                  { type: String, required: true },
+  sessionType:            { type: String, default: 'other' },
+  defaultDurationMinutes: { type: Number, default: 60 },
+  description:            { type: String },
+  defaultFields:          [FieldSpecSchema],
+  layout:                 { type: TemplateLayoutSchema, required: false },
 }, { _id: false });
 
 const EventTemplateSchema = new Schema<IEventTemplate>({

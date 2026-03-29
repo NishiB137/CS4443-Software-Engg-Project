@@ -3,9 +3,9 @@ import { useEventWizard } from '@/modules/eventCreation/microFrontends/eventWiza
 import { Stepper } from '@/modules/eventCreation/components/Stepper.tsx';
 import { Step1Template } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step1Template';
 import { GenericFormStep } from '@/modules/eventCreation/microFrontends/eventWizard/components/GenericFormStep';
-import { StepRemarks } from '@/modules/eventCreation/microFrontends/eventWizard/components/StepRemarks';
 import { Step3Visibility } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step3Visibility';
 import { Step4Sessions } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Sessions';
+import { Step5Faq } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step5Faq';
 import { Step4Review } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Review';
 
 export const EventWizardMFE: React.FC = () => {
@@ -35,10 +35,10 @@ export const EventWizardMFE: React.FC = () => {
 
     switch (stepDef.type) {
       case 'template': return <Step1Template {...props} />;
-      case 'remarks': return <StepRemarks {...props} />;
       case 'form': return <GenericFormStep formName={stepDef.formName!} {...props} />;
       case 'visibility': return <Step3Visibility {...props} />;
       case 'sessions': return <Step4Sessions {...props} />;
+      case 'faq': return <Step5Faq {...props} />;
       case 'review': return <Step4Review {...props} />;
       default: return null;
     }

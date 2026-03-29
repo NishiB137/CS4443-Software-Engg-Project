@@ -54,6 +54,7 @@ export interface ApiEvent {
   maxCapacity?: number;
   coverImage?: string;
   bannerImage?: string;
+  media?: { videoUrl?: string; logo?: string };
   organizerName?: string;
   organization: { _id: string; name: string; slug: string; logo?: string } | string;
   createdBy: { _id: string; name: string; email: string } | string;
@@ -103,6 +104,8 @@ export interface CreateEventPayload {
   visibility: 'public' | 'restricted' | 'hidden_link' | 'hidden_authenticated';
   status?: 'draft' | 'published';
   coverImage?: string;
+  bannerImage?: string;
+  media?: { videoUrl?: string; logo?: string };
   organizerName?: string;
   policies?: Record<string, unknown>;
   faqs?: Array<{ question: string; answer: string }>;
@@ -192,6 +195,10 @@ export const eventApi = {
   like: (id: string) =>
     request<{ success: boolean; likes: number }>(`/events/${id}/like`, { method: 'POST' }),
 
+  /** Increment server-side view counter (idempotent per browser via localStorage in UI) */
+  addView: (id: string) =>
+    request<{ success: boolean; views: number }>(`/events/${id}/view`, { method: 'POST' }),
+
   getComments: (eventId: string) =>
     request<{ success: boolean; data: ApiComment[] }>(`/events/${eventId}/comments`),
 
@@ -205,7 +212,7 @@ export const eventApi = {
 // ─── Template types ───────────────────────────────────────────────────────────
 
 export type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'time' | 'datetime'
-  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone';
+  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone' | 'speakers' | 'file_image' | 'file_video';
 
 export type FieldSection = 'basics' | 'datetime' | 'venue' | 'capacity' | 'policies' | 'media' | 'custom';
 
@@ -235,6 +242,7 @@ export interface SessionTemplate {
   defaultDurationMinutes: number;
   description?: string;
   defaultFields: FieldSpec[];
+  layout?: TemplateLayout;
 }
 
 export interface TemplateLayoutCategory {
@@ -325,4 +333,19 @@ export const templateApi = {
 
   use: (id: string) =>
     request<{ success: boolean }>(`/templates/${id}/use`, { method: 'POST' }),
+};
+
+// ─── Direct Upload API (Bypasses JSON request wrapper) ────────────────────────
+export const uploadApi = {
+  uploadFile: async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE_URL}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Upload failed');
+    return json.url;
+  },
 };

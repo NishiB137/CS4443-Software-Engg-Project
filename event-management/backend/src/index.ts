@@ -5,6 +5,7 @@ import connectDB from './config/db.js';
 import eventRoutes    from './routes/eventRoutes.js';
 import sessionRoutes  from './routes/sessionRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
+import uploadRoutes   from './routes/uploadRoutes.js';
 
 // ─── Model imports ─────────────────────────────────────────────────────────────
 import './models/User.js';
@@ -46,6 +47,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/events',       eventRoutes);
 app.use('/api/sessions',     sessionRoutes);
 app.use('/api/templates',    templateRoutes);
+app.use('/api/upload',       uploadRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => {
@@ -54,3 +56,5 @@ app.use((_req, res) => {
 
 const PORT = process.env['PORT'] || 8080;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// trigger restart 2

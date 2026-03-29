@@ -195,6 +195,24 @@ export const likeEvent = async (req: Request, res: Response) => {
   }
 };
 
+// ─── POST /api/events/:id/view — increment public view counter ───────────────
+export const incrementView = async (req: Request, res: Response) => {
+  try {
+    const updated = await eventService.incrementEventViews(param(req, 'id'));
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Event not found' });
+      return;
+    }
+    res.json({
+      success: true,
+      views: updated.analytics?.views ?? 0,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(500).json({ success: false, message });
+  }
+};
+
 // ─── GET /api/events/:id/changelog ───────────────────────────────────────────
 export const getChangelog = async (req: Request, res: Response) => {
   try {

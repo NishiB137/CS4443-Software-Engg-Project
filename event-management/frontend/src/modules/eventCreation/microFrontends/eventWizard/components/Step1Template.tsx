@@ -133,22 +133,39 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
         .map((f) => [f.key, f.defaultValue ?? ''])
     );
 
+    const onlineLinkDefault = mergedFields.find(f => f.key === 'onlineLink')?.defaultValue ?? '';
+    const venueSysFields = ['venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country'].reduce((acc: any, k) => {
+      const val = mergedFields.find(f => f.key === k)?.defaultValue;
+      if (val) acc[k.replace('venue_', '')] = val;
+      return acc;
+    }, {});
+
+    const rawSystemFields = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity'];
+    const otherSysDefaults = mergedFields
+      .filter((f) => rawSystemFields.includes(f.key) && f.defaultValue)
+      .reduce((acc: any, f) => { acc[f.key] = f.defaultValue; return acc; }, {});
+
     updateData({
       template:   tpl._id,
       templateName: tpl.name,
       templateFields: mergedFields,
+      templateLayout: tpl.layout,
       sessionTemplates: (tpl.sessionTemplates ?? []).map((s) => ({
         title: s.title,
         sessionType: s.sessionType,
         defaultDurationMinutes: s.defaultDurationMinutes,
         description: s.description,
+        defaultFields: s.defaultFields,
+        layout: s.layout,
       })),
       sessions: [],
       customFieldValues: customFieldDefaults,
-      eventType:  tpl.eventType,
-      format:     tpl.format as typeof data.format,
-      isFree:     tpl.isFree,
+      ...otherSysDefaults,
+      eventType:  otherSysDefaults.eventType || tpl.eventType,
+      format:     otherSysDefaults.format || tpl.format as typeof data.format,
+      isFree:     otherSysDefaults.isFree !== undefined ? otherSysDefaults.isFree === 'true' : tpl.isFree,
       visibility: (tpl.defaultVisibility as typeof data.visibility) || 'public',
+      venue: { ...data.venue, onlineLink: onlineLinkDefault, ...venueSysFields },
       // Pre-fill policies from template defaults
       policies: {
         refundPolicy:       (tpl.defaultPolicies?.refundPolicy as typeof data.policies.refundPolicy) || '',

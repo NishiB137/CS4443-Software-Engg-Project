@@ -1,3 +1,5 @@
+import type { FieldSpec, TemplateLayout } from '@/services/api';
+
 // Full form data shape that maps 1-to-1 with the backend CreateEventPayload.
 // Each wizard step works on a slice of this interface.
 
@@ -25,6 +27,10 @@ export interface SessionFormData {
   maxAttendees: string;
   speakers: SessionSpeaker[];
   tags: string[];
+  customFieldValues: Record<string, string>;
+  templateId?: string;
+  templateFields?: FieldSpec[];
+  templateLayout?: TemplateLayout;
 }
 
 export const EMPTY_SESSION: SessionFormData = {
@@ -41,6 +47,7 @@ export const EMPTY_SESSION: SessionFormData = {
   maxAttendees: '',
   speakers: [],
   tags: [],
+  customFieldValues: {},
 };
 
 // ─── Validation limits ────────────────────────────────────────────────────────
@@ -92,12 +99,18 @@ export interface EventFormData {
     sessionType: string;
     defaultDurationMinutes: number;
     description?: string;
+    defaultFields?: FieldSpec[];
+    layout?: TemplateLayout;
   }>;
   customFieldValues: Record<string, string>;
+  templateLayout?: TemplateLayout;
 
   title: string;
   shortDescription: string;
   description: string;
+  coverImage: string;
+  bannerImage: string;
+  videoUrl: string;
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
@@ -116,6 +129,7 @@ export interface EventFormData {
     state: string;
     country: string;
     onlineLink: string;
+    shareOnlineLinkLater?: string;
   };
   visibility: 'public' | 'restricted' | 'hidden_link' | 'hidden_authenticated';
   policies: {
@@ -157,7 +171,7 @@ export const currentTime = (): string => {
 export interface StepDef {
   id: string;
   title: string;
-  type: 'template' | 'remarks' | 'form' | 'visibility' | 'sessions' | 'review';
+  type: 'template' | 'form' | 'visibility' | 'sessions' | 'faq' | 'review';
   formName?: string;
 }
 
@@ -179,7 +193,6 @@ export const validateStep4 = (data: EventFormData): StepErrors => {
 
 export const validateStep = (step: StepDef, data: EventFormData): StepErrors => {
   if (step.type === 'template') return validateStep1(data);
-  if (step.type === 'remarks') return {};
   if (step.type === 'visibility') return {};
   if (step.type === 'sessions') return validateStep4(data);
   if (step.type === 'review') return {};
@@ -190,10 +203,11 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
     const fieldKeys = new Set(fieldsInForm.map(f => f.key));
 
     for (const f of fieldsInForm) {
-      const val = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge'].includes(f.key)
+      const val = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink', 'shareOnlineLinkLater', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge', 'coverImage', 'bannerImage', 'videoUrl'].includes(f.key)
         ? (() => {
             if (f.key.startsWith('venue_')) return data.venue[f.key.replace('venue_', '') as keyof typeof data.venue];
             if (f.key === 'refundPolicy' || f.key === 'cancellationPolicy' || f.key === 'attendeeMinAge') return data.policies[f.key as keyof typeof data.policies];
+            if (f.key === 'shareOnlineLinkLater') return data.venue.shareOnlineLinkLater;
             return (data as any)[f.key];
           })()
         : data.customFieldValues[f.key];
@@ -241,10 +255,6 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
         if (isNaN(end.getTime()) || end.getFullYear() < 2000) errors['endDate'] = 'End date/time is not a valid date.';
         else if (startStr && !errors['startDate'] && start && end <= start) errors['endDate'] = 'End date/time must be after the start date/time.';
       }
-    }
-
-    if (fieldKeys.has('onlineLink') && data.venue.onlineLink.trim() && !/^https?:\/\/.+/.test(data.venue.onlineLink)) {
-      errors['onlineLink'] = 'Online link must start with http:// or https://';
     }
 
     return errors;

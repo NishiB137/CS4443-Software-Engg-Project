@@ -34,29 +34,53 @@ const capacityField = (order = 30): IFieldSpec => ({
 });
 
 const policyFields = (order = 40): IFieldSpec[] => [
-  { key: 'refundPolicy',       label: 'Refund Policy',      fieldType: 'select',   required: false, section: 'policies', order: order + 0, options: ['full','partial','no_refund'] },
-  { key: 'cancellationPolicy', label: 'Cancellation Policy',fieldType: 'textarea', required: false, section: 'policies', order: order + 1, maxLength: 2000 },
+  { key: 'refundPolicy',       label: 'Refund Policy',      fieldType: 'select',   required: false, defaultValue: 'no_refund', section: 'policies', order: order + 0, options: ['full','partial','no_refund'] },
+  { key: 'cancellationPolicy', label: 'Cancellation Policy',fieldType: 'textarea', required: false, defaultValue: 'Non-refundable.', section: 'policies', order: order + 1, maxLength: 2000 },
   { key: 'attendeeMinAge',     label: 'Minimum Attendee Age',fieldType: 'number',  required: false, defaultValue: '0',   section: 'policies', order: order + 2, min: 0, max: 120 },
 ];
 
 const onlineLinkField = (order = 25): IFieldSpec => ({
-  key: 'onlineLink', label: 'Online Event Link', fieldType: 'url', required: true,
-  placeholder: 'https://zoom.us/j/...', section: 'venue', order, helpText: 'Required for virtual and hybrid events',
+  key: 'onlineLink', label: 'Online Event Link', fieldType: 'text', required: true,
+  defaultValue: 'Link will be shared soon', section: 'venue', order, helpText: 'Required for virtual and hybrid events',
 });
 
 // ─── Session templates ────────────────────────────────────────────────────────
+
+const DEFAULT_SESSION_LAYOUT = {
+  forms: [
+    { name: 'Session Details', order: 0, categories: [{ name: 'General', order: 0 }, { name: 'Date & Time', order: 1 }, { name: 'Location', order: 2 }] },
+    { name: 'Speakers & Meeting', order: 1, categories: [{ name: 'Manage Speakers', order: 0 }, { name: 'Meeting Link', order: 1 }] }
+  ]
+};
+
+const getSessionDefaultFields = (title: string, sessionType: string, defaultDurationMinutes: number): IFieldSpec[] => [
+  { key: 'title', label: 'Session Title', fieldType: 'text', required: true, section: 'basics', order: 0, form: 'Session Details', category: 'General', defaultValue: title },
+  { key: 'sessionType', label: 'Session Type', fieldType: 'select', required: true, options: ['keynote', 'panel', 'workshop', 'networking', 'performance', 'competition_round', 'break', 'other'], section: 'basics', order: 1, form: 'Session Details', category: 'General', defaultValue: sessionType },
+  { key: 'description', label: 'Description', fieldType: 'textarea', required: false, maxLength: 1000, section: 'basics', order: 2, form: 'Session Details', category: 'General' },
+  { key: 'notes', label: 'Remarks / Notes', fieldType: 'textarea', required: false, maxLength: 500, section: 'basics', order: 3, form: 'Session Details', category: 'General' },
+  { key: 'defaultDurationMinutes', label: 'Default Duration (minutes)', fieldType: 'number', required: false, min: 5, max: 1440, section: 'basics', order: 4, form: 'Session Details', category: 'General', defaultValue: String(defaultDurationMinutes) },
+  { key: 'startDate', label: 'Start Date', fieldType: 'date', required: true, section: 'datetime', order: 0, form: 'Session Details', category: 'Date & Time' },
+  { key: 'startTime', label: 'Start Time', fieldType: 'time', required: true, section: 'datetime', order: 1, form: 'Session Details', category: 'Date & Time' },
+  { key: 'endDate', label: 'End Date', fieldType: 'date', required: true, section: 'datetime', order: 2, form: 'Session Details', category: 'Date & Time' },
+  { key: 'endTime', label: 'End Time', fieldType: 'time', required: true, section: 'datetime', order: 3, form: 'Session Details', category: 'Date & Time' },
+  { key: 'room', label: 'Room / Hall', fieldType: 'text', required: false, section: 'venue', order: 0, form: 'Session Details', category: 'Location' },
+  { key: 'maxAttendees', label: 'Max Attendees', fieldType: 'number', required: false, min: 1, section: 'capacity', order: 0, form: 'Session Details', category: 'Location' },
+  { key: 'speakers', label: 'Speakers', fieldType: 'speakers', required: false, section: 'custom', order: 0, form: 'Speakers & Meeting', category: 'Manage Speakers' },
+  { key: 'streamUrl', label: 'Meeting Link / Stream URL', fieldType: 'text', required: false, defaultValue: 'Link will be shared soon', section: 'venue', order: 1, form: 'Speakers & Meeting', category: 'Meeting Link' },
+];
+
+const overrideField = (fields: IFieldSpec[], key: string, overrides: Partial<IFieldSpec>) => {
+  const f = fields.find(x => x.key === key);
+  if (f) Object.assign(f, overrides);
+};
 
 const keynoteSessionTemplate = (): ISessionTemplate => ({
   title: 'Keynote Session',
   sessionType: 'keynote',
   defaultDurationMinutes: 60,
   description: 'Main stage keynote with a single speaker',
-  defaultFields: [
-    { key: 'title',       label: 'Session Title',    fieldType: 'text',     required: true,  section: 'basics', order: 0 },
-    { key: 'description', label: 'Description',      fieldType: 'textarea', required: false, section: 'basics', order: 1 },
-    { key: 'room',        label: 'Stage / Hall',     fieldType: 'text',     required: false, section: 'venue',  order: 2 },
-    { key: 'streamUrl',   label: 'Live Stream URL',  fieldType: 'url',      required: false, section: 'venue',  order: 3 },
-  ],
+  defaultFields: getSessionDefaultFields('Keynote Session', 'keynote', 60),
+  layout: DEFAULT_SESSION_LAYOUT,
 });
 
 const panelSessionTemplate = (): ISessionTemplate => ({
@@ -64,37 +88,30 @@ const panelSessionTemplate = (): ISessionTemplate => ({
   sessionType: 'panel',
   defaultDurationMinutes: 45,
   description: 'Multi-speaker discussion panel',
-  defaultFields: [
-    { key: 'title',        label: 'Panel Title',       fieldType: 'text',     required: true,  section: 'basics', order: 0 },
-    { key: 'description',  label: 'Panel Topic',       fieldType: 'textarea', required: false, section: 'basics', order: 1 },
-    { key: 'room',         label: 'Room',              fieldType: 'text',     required: false, section: 'venue',  order: 2 },
-    { key: 'maxAttendees', label: 'Max Attendees',     fieldType: 'number',   required: false, section: 'capacity', order: 3, min: 1 },
-  ],
+  defaultFields: getSessionDefaultFields('Panel Discussion', 'panel', 45),
+  layout: DEFAULT_SESSION_LAYOUT,
 });
 
-const workshopSessionTemplate = (): ISessionTemplate => ({
-  title: 'Hands-on Workshop',
-  sessionType: 'workshop',
-  defaultDurationMinutes: 120,
-  description: 'Interactive workshop with limited seats',
-  defaultFields: [
-    { key: 'title',        label: 'Workshop Title',  fieldType: 'text',     required: true,  section: 'basics', order: 0 },
-    { key: 'description',  label: 'What Youll Learn',fieldType: 'textarea', required: false, section: 'basics', order: 1 },
-    { key: 'room',         label: 'Lab / Room',      fieldType: 'text',     required: false, section: 'venue',  order: 2 },
-    { key: 'maxAttendees', label: 'Seats Available', fieldType: 'number',   required: true,  section: 'capacity', order: 3, min: 1, max: 100 },
-  ],
-});
+const workshopSessionTemplate = (): ISessionTemplate => {
+  const fields = getSessionDefaultFields('Hands-on Workshop', 'workshop', 120);
+  overrideField(fields, 'maxAttendees', { required: true, max: 100 });
+  return {
+    title: 'Hands-on Workshop',
+    sessionType: 'workshop',
+    defaultDurationMinutes: 120,
+    description: 'Interactive workshop with limited seats',
+    defaultFields: fields,
+    layout: DEFAULT_SESSION_LAYOUT,
+  };
+};
 
 const networkingSessionTemplate = (): ISessionTemplate => ({
   title: 'Networking Break',
   sessionType: 'networking',
   defaultDurationMinutes: 30,
   description: 'Unstructured networking time for attendees',
-  defaultFields: [
-    { key: 'title',       label: 'Session Name', fieldType: 'text',     required: true,  section: 'basics', order: 0 },
-    { key: 'description', label: 'Details',      fieldType: 'textarea', required: false, section: 'basics', order: 1 },
-    { key: 'room',        label: 'Area',         fieldType: 'text',     required: false, section: 'venue',  order: 2 },
-  ],
+  defaultFields: getSessionDefaultFields('Networking Break', 'networking', 30),
+  layout: DEFAULT_SESSION_LAYOUT,
 });
 
 const breakSessionTemplate = (): ISessionTemplate => ({
@@ -102,10 +119,8 @@ const breakSessionTemplate = (): ISessionTemplate => ({
   sessionType: 'break',
   defaultDurationMinutes: 15,
   description: 'Short break between sessions',
-  defaultFields: [
-    { key: 'title', label: 'Break Name', fieldType: 'text', required: true, section: 'basics', order: 0, defaultValue: 'Break' },
-    { key: 'room',  label: 'Area',       fieldType: 'text', required: false, section: 'venue', order: 1 },
-  ],
+  defaultFields: getSessionDefaultFields('Break / Intermission', 'break', 15),
+  layout: DEFAULT_SESSION_LAYOUT,
 });
 
 const competitionRoundTemplate = (): ISessionTemplate => ({
@@ -113,11 +128,8 @@ const competitionRoundTemplate = (): ISessionTemplate => ({
   sessionType: 'competition_round',
   defaultDurationMinutes: 60,
   description: 'Round with rules and judging',
-  defaultFields: [
-    { key: 'title',       label: 'Round Title',     fieldType: 'text',     required: true,  section: 'basics', order: 0 },
-    { key: 'description', label: 'Rules / Details', fieldType: 'textarea', required: false, section: 'basics', order: 1 },
-    { key: 'room',        label: 'Venue / Room',    fieldType: 'text',     required: false, section: 'venue',  order: 2 },
-  ],
+  defaultFields: getSessionDefaultFields('Competition Round', 'competition_round', 60),
+  layout: DEFAULT_SESSION_LAYOUT,
 });
 
 // ─── Default event templates ──────────────────────────────────────────────────

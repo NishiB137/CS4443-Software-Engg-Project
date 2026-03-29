@@ -5,6 +5,18 @@ import { formatEventDate, getVenueDisplay, getOrganizerName } from '../../EventC
 
 const likedStorageKey = (eventId: string) => `event_liked_${eventId}`;
 
+type TicketingTier = {
+  name: string;
+  price: number;
+  description?: string;
+  capacity?: number;
+};
+
+type Pricing = { basePrice?: number };
+type Sponsor = { name?: string };
+type Analytics = { views?: number; likes?: number; bookmarks?: number; registrations?: number };
+type PocDetails = { name?: string; email?: string; phone?: string };
+
 // ─── Mapped shape used by the UI component ────────────────────────────────────
 export interface EventSession {
   id: string;
@@ -78,30 +90,12 @@ export interface EventDetail {
   _raw: ApiEvent;
 }
 
-const FALLBACK_IMAGES = [
-  'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1600&q=80',
-  'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=1600&q=80',
-  'https://images.unsplash.com/photo-1515187029135-18ee286d815b?auto=format&fit=crop&w=1600&q=80',
-];
-
-type TicketingTier = {
-  name: string;
-  price: number;
-  description?: string;
-  capacity?: number;
-};
-
-type Pricing = { basePrice?: number };
-type Sponsor = { name?: string };
-type Analytics = { views?: number; likes?: number; bookmarks?: number; registrations?: number };
-type PocDetails = { name?: string; email?: string; phone?: string };
-
 const mapApiEventToDetail = (e: ApiEvent): Omit<EventDetail, 'sessions'> => {
   // Build images array
   const images: string[] = [];
+  if (e.media?.videoUrl) images.push(e.media.videoUrl);
   if (e.coverImage)  images.push(e.coverImage);
   if (e.bannerImage && e.bannerImage !== e.coverImage) images.push(e.bannerImage);
-  while (images.length < 3) images.push(FALLBACK_IMAGES[images.length] ?? FALLBACK_IMAGES[0]!);
 
   // Tags
   const rawTags = (e as unknown as { tags?: Array<{ name?: string } | string> }).tags ?? [];
@@ -283,6 +277,20 @@ export const useEventDetails = () => {
         setEvent(detail);
         if (typeof window !== 'undefined' && localStorage.getItem(likedStorageKey(detail.id))) {
           setIsLiked(true);
+        }
+
+        // View count increment
+        if (typeof window !== 'undefined') {
+          const viewedStorageKey = `event_viewed_${detail.id}`;
+          if (!localStorage.getItem(viewedStorageKey)) {
+            // First time viewing in this browser, increment view API
+            eventApi.addView(detail.id).then(res => {
+              if (res.success) {
+                localStorage.setItem(viewedStorageKey, '1');
+                setEvent(prev => prev ? { ...prev, views: res.views.toLocaleString() } : prev);
+              }
+            }).catch(() => { /* ignore */ });
+          }
         }
 
         // Fetch comments

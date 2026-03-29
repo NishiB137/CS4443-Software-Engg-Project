@@ -13,6 +13,9 @@ const INITIAL_DATA: EventFormData = {
   title: '',
   shortDescription: '',
   description: '',
+  coverImage: '',
+  bannerImage: '',
+  videoUrl: '',
   eventType: 'other',
   format: 'physical',
   isFree: true,
@@ -67,14 +70,14 @@ export const useEventWizard = () => {
   const steps = useMemo<StepDef[]>(() => {
     const s: StepDef[] = [{ id: 'template', title: 'Template', type: 'template' }];
     if (formData.template) {
-      s.push({ id: 'remarks', title: 'Remarks', type: 'remarks' });
-      // Identify distinct forms from template fields. Keep original defined order.
+      // Identity distinct forms from template fields. Keep original defined order.
       const forms = Array.from(new Set(formData.templateFields.map(f => f.form ?? 'Basic Info')));
       forms.forEach(form => {
         s.push({ id: `form-${form}`, title: form, type: 'form', formName: form });
       });
       s.push({ id: 'visibility', title: 'Visibility', type: 'visibility' });
       s.push({ id: 'sessions', title: 'Sessions', type: 'sessions' });
+      s.push({ id: 'faq', title: 'FAQs', type: 'faq' });
       s.push({ id: 'review', title: 'Review & Publish', type: 'review' });
     }
     return s;
@@ -152,6 +155,9 @@ export const useEventWizard = () => {
         title:            formData.title.trim(),
         shortDescription: formData.shortDescription.trim() || undefined,
         description:      formData.description.trim(),
+        coverImage:       formData.coverImage.trim() || undefined,
+        bannerImage:      formData.bannerImage.trim() || undefined,
+        media:            { videoUrl: formData.videoUrl.trim() || undefined },
         eventType:        formData.eventType,
         format:           formData.format,
         isFree:           formData.isFree,

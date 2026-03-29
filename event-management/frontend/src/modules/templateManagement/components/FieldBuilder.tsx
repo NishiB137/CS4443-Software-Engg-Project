@@ -57,11 +57,12 @@ interface FieldRowProps {
   isSystemField: boolean;
   isNew?: boolean;
   readOnly?: boolean;
+  isSessionTemplate?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
 }
 
 const FieldRow: React.FC<FieldRowProps> = ({
-  field, index, onUpdate, onRemove, isSystemField, isNew, readOnly, dragHandleProps,
+  field, index, onUpdate, onRemove, isSystemField, isNew, readOnly, isSessionTemplate, dragHandleProps,
 }) => {
   const lockKey = readOnly || isSystemField;
   const [expanded, setExpanded] = useState(false);
@@ -147,7 +148,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
         </button>
 
         {/* Remove */}
-        {!isSystemField && !readOnly && (
+        {(!isSystemField || isSessionTemplate) && !readOnly && (
           <button type="button" onClick={onRemove} className="text-red-300 hover:text-red-500 flex-shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -272,12 +273,13 @@ interface FieldBuilderProps {
   extraCategoryContent?: Record<string, React.ReactNode>; // key: `${form}::${category}`
   systemFieldKeys?: string[];   // keys that are locked
   readOnly?: boolean;
+  isSessionTemplate?: boolean;
 }
 
-export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, layout, onLayoutChange, extraFormContent, extraCategoryContent, systemFieldKeys = [], readOnly }) => {
+export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, layout, onLayoutChange, extraFormContent, extraCategoryContent, systemFieldKeys = [], readOnly, isSessionTemplate }) => {
   const [newKeys, setNewKeys] = useState<Record<string, true>>({});
   const [activeForm, setActiveForm] = useState<string>(''); // set lazily from computed forms
-  const [collapsedCats, setCollapsedCats] = useState<Record<string, true>>({});
+  const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
   const [movePicker, setMovePicker] = useState<{ openFor: string | null }>({ openFor: null });
 
   // Track drag start/target for stable reordering (works even when clicking inputs).
@@ -460,6 +462,18 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
     });
   };
 
+  const deleteForm = (formName: string) => {
+    if (!onLayoutChange) return;
+    const nextForms = forms.filter((f) => f.name !== formName).map((f, idx) => ({ ...f, order: idx }));
+    setLayout({ forms: nextForms });
+    onChange(fields.map((f) => {
+      const nf = withDefaultLayout(f);
+      if ((nf.form ?? 'Basic Info') === formName) return { ...f, form: 'Basic Info', category: 'General' };
+      return f;
+    }));
+    if (activeForm === formName) setActiveForm('');
+  };
+
   const addCategory = (formName: string) => {
     if (!onLayoutChange) return;
     openNameDialog('New category', '', (value) => {
@@ -497,6 +511,23 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
         return f;
       }));
     });
+  };
+
+  const deleteCategory = (formName: string, catName: string) => {
+    if (!onLayoutChange) return;
+    const nextForms = forms.map((f) => ({ ...f, categories: (f.categories ?? []).slice() }));
+    const form = nextForms.find((f) => f.name === formName);
+    if (!form) return;
+
+    form.categories = (form.categories ?? []).filter((c) => c.name !== catName).map((c, idx) => ({ ...c, order: idx }));
+    setLayout({ forms: nextForms.map((f, idx) => ({ ...f, order: idx })) });
+
+    // Move any fields in this category to General
+    onChange(fields.map((f) => {
+      const nf = withDefaultLayout(f);
+      if ((nf.form ?? 'Basic Info') === formName && (nf.category ?? 'General') === catName) return { ...f, category: 'General' };
+      return f;
+    }));
   };
 
   const moveCategoryToForm = (fromForm: string, categoryName: string, toForm: string) => {
@@ -592,11 +623,18 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                       {f.name}
                     </button>
                     {!readOnly && onLayoutChange && selected && (
-                      <button type="button" onClick={() => renameForm(f.name)} className="px-2 py-2 text-gray-400 hover:text-gray-700">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
-                        </svg>
-                      </button>
+                      <div className="flex gap-1 ml-1 border-l border-gray-200 pl-1">
+                        <button type="button" onClick={() => renameForm(f.name)} className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-white" title="Rename form">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
+                          </svg>
+                        </button>
+                        <button type="button" onClick={() => deleteForm(f.name)} className="p-1 text-gray-400 hover:text-red-500 rounded hover:bg-white" title="Delete form">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -689,8 +727,13 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                                 className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-10"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100">
-                                  Move to form
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                                  <span>Move to form</span>
+                                  <button type="button" onClick={() => { deleteCategory(resolvedActiveForm, cat.name); setMovePicker({ openFor: null }); }} className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50">
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
                                 </div>
                                 <div className="p-1">
                                   {forms
@@ -718,6 +761,9 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                           <button type="button" onClick={() => addToCategory(resolvedActiveForm, cat.name)} className="px-2.5 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                             + Field
                           </button>
+                          <button type="button" onClick={() => deleteCategory(resolvedActiveForm, cat.name)} className="px-2.5 py-1.5 text-xs font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 ml-auto transition" title="Delete Category">
+                            Delete
+                          </button>
                         </>
                       )}
                     </div>
@@ -742,6 +788,7 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                               isSystemField={systemFieldKeys.includes(f.key)}
                               isNew={!!newKeys[f.key]}
                               readOnly={readOnly}
+                              isSessionTemplate={isSessionTemplate}
                               dragHandleProps={{
                                 draggable: !readOnly,
                                 onDragStart: (e) => {
@@ -766,7 +813,7 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                                   const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
                                   let payload: any = null;
                                   try { payload = JSON.parse(raw); } catch { payload = null; }
-                                  const from = payload?.type === 'field' ? Number(payload.fromIndex) : dragState.type === 'field' ? dragState.fromIndex : NaN;
+                                  const from = payload?.type === 'field' ? Number(payload.fromIndex) : dragState.type === 'field' ? (dragState.fromIndex ?? NaN) : NaN;
                                   const fromForm = payload?.fromForm ?? dragState.fromForm;
                                   const fromCategory = payload?.fromCategory ?? dragState.fromCategory;
                                   if (!Number.isFinite(from) || fromForm !== resolvedActiveForm || fromCategory !== cat.name) return;

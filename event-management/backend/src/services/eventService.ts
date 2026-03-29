@@ -36,8 +36,6 @@ const LIMITS = {
   venueField:         { max: 200 },
 };
 
-const isValidUrl = (url: string) => /^https?:\/\/.+/.test(url);
-
 // ─── Safe ISO date parser ─────────────────────────────────────────────────────
 // Returns null if the string is not a real, non-epoch date.
 const parseDate = (raw: unknown): Date | null => {
@@ -105,11 +103,6 @@ const validateCreateBody = (body: CreateEventBody): void => {
   const validFormats = ['physical', 'virtual', 'hybrid'];
   if (!body.format || !validFormats.includes(body.format))
     errors.push(`Format must be one of: ${validFormats.join(', ')}.`);
-
-  // ── Online link ──
-  const onlineLink = asString(body.venue?.onlineLink);
-  if (onlineLink.trim() && !isValidUrl(onlineLink))
-    errors.push('Online event link must start with http:// or https://');
 
   // ── Venue field lengths ──
   const venueTextFields = ['name', 'address', 'city', 'state', 'country'] as const;
@@ -179,7 +172,7 @@ export const createEvent = async (body: CreateEventBody) => {
       validateSessionBody({
         event: '000000000000000000000000',
         title: s.title,
-        description: s.description,
+        description: s.description ?? '',
         notes: s.notes,
         sessionType: s.sessionType,
         startTime: s.startTime,
@@ -192,15 +185,16 @@ export const createEvent = async (body: CreateEventBody) => {
         tags: s.tags,
         order: s.order ?? idx,
         createdBy: body.createdBy,
-      });
+      } as any);
       return { ...s, order: s.order ?? idx };
     });
 
+    const { sessions: _ignoreSessions, ...payloadBody } = body;
+
     const [event] = await Event.create([{
-      ...body,
+      ...payloadBody,
       slug,
       tags: tagIds,
-      sessions: undefined,
       status: body.status ?? 'draft',
       visibility: body.visibility ?? 'public',
       changeLog: [{
@@ -213,7 +207,7 @@ export const createEvent = async (body: CreateEventBody) => {
       }],
     }], { session });
 
-    if (validatedSessions.length > 0) {
+    if (validatedSessions.length > 0 && event) {
       await Session.insertMany(validatedSessions.map((s) => ({
         event: event._id,
         createdBy: body.createdBy,
@@ -359,6 +353,15 @@ export const incrementEventLikes = async (id: string) => {
   return Event.findByIdAndUpdate(
     id,
     { $inc: { 'analytics.likes': 1 } },
+    { new: true },
+  ).select('analytics');
+};
+
+/** Increment view counter */
+export const incrementEventViews = async (id: string) => {
+  return Event.findByIdAndUpdate(
+    id,
+    { $inc: { 'analytics.views': 1 } },
     { new: true },
   ).select('analytics');
 };

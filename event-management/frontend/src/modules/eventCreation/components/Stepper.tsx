@@ -14,19 +14,19 @@ export const Stepper: React.FC<StepperProps> = ({ currentStep, steps }) => {
         const isCompleted = stepNum < currentStep;
 
         return (
-          <div key={step} className="flex items-center">
-            <div className={`flex flex-col items-center relative`}>
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 font-semibold text-sm transition-colors
+          <div key={step} className="flex items-center flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <div className={`flex flex-shrink-0 items-center justify-center w-8 h-8 rounded-full border-2 font-semibold text-xs transition-colors
                 ${isActive ? 'bg-blue-600 text-white border-blue-600' : 
-                  isCompleted ? 'bg-white text-blue-600 border-blue-600' : 'bg-white text-gray-400 border-gray-300'}`}>
+                  isCompleted ? 'bg-white text-blue-600 border-blue-600' : 'bg-white text-gray-400 border-gray-200'}`}>
                 {isCompleted ? '✓' : stepNum}
               </div>
-              <span className={`absolute top-12 text-xs font-medium w-24 text-center ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
+              <span className={`text-xs font-medium whitespace-nowrap ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
                 {step}
               </span>
             </div>
             {index < steps.length - 1 && (
-              <div className={`w-16 sm:w-24 h-0.5 mx-2 -translate-y-3 ${isCompleted ? 'bg-blue-600' : 'bg-gray-200'}`} />
+              <div className={`w-10 sm:w-16 h-[2px] mx-3 rounded-full flex-shrink-0 ${isCompleted ? 'bg-blue-600' : 'bg-gray-200'}`} />
             )}
           </div>
         );

@@ -65,9 +65,6 @@ export const validateSessionBody = (body: CreateSessionBody): void => {
       errors.push(`Max attendees cannot exceed ${SESSION_LIMITS.maxAttendees.max.toLocaleString()}.`);
   }
 
-  if (body.streamUrl && !/^https?:\/\/.+/.test(body.streamUrl))
-    errors.push('Stream URL must start with http:// or https://');
-
   if (body.speakers) {
     body.speakers.forEach((sp, i) => {
       if (sp.name && sp.name.length > SESSION_LIMITS.speakerName.max)

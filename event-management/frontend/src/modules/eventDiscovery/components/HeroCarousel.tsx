@@ -1,22 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { eventApi } from '@/services/api';
+import type { ApiEvent } from '@/services/api';
 
-const slides = [
+const DEFAULT_SLIDES = [
   {
-    id: 1,
+    id: '1',
+    slug: 'tech-innovation',
     title: "Tech Innovation Summit 2026",
     subtitle: "Join industry leaders to shape the future of technology.",
     date: "July 20, 2026",
     image: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1600&q=80",
   },
   {
-    id: 2,
+    id: '2',
+    slug: 'global-music',
     title: "Global Music Festival",
     subtitle: "Experience the ultimate sound of summer.",
     date: "August 15, 2026",
     image: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1600&q=80",
   },
   {
-    id: 3,
+    id: '3',
+    slug: 'creative-arts',
     title: "Creative Arts Expo",
     subtitle: "Discover groundbreaking artwork and installations.",
     date: "September 10, 2026",
@@ -24,16 +30,46 @@ const slides = [
   }
 ];
 
+const formatDate = (iso: string) => {
+  return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
 export const HeroCarousel: React.FC = () => {
+  const [slides, setSlides] = useState<typeof DEFAULT_SLIDES>([]);
   const [current, setCurrent] = useState(0);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    eventApi.list({ limit: '5', visibility: 'public', status: 'published' })
+      .then(res => {
+        if (res.events && res.events.length > 0) {
+          const dynamicSlides = res.events.map((e: ApiEvent) => ({
+            id: e._id,
+            slug: e.slug,
+            title: e.title,
+            subtitle: e.shortDescription || 'Join us for this exciting event.',
+            date: formatDate(e.startDate),
+            image: e.coverImage || e.bannerImage || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1600&q=80",
+          }));
+          setSlides(dynamicSlides);
+        } else {
+          setSlides(DEFAULT_SLIDES);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch events for carousel', err);
+        setSlides(DEFAULT_SLIDES);
+      });
+  }, []);
 
   // Auto-play interval
   useEffect(() => {
+    if (slides.length <= 1) return;
     const timer = setInterval(() => {
       setCurrent((prev) => (prev + 1) % slides.length);
     }, 5000); 
     return () => clearInterval(timer);
-  }, [current]); // Reset timer when slide changes manually
+  }, [current, slides.length]); // Reset timer when slide changes manually
 
   const nextSlide = () => setCurrent((prev) => (prev + 1) % slides.length);
   const prevSlide = () => setCurrent((prev) => (prev - 1 + slides.length) % slides.length);
@@ -45,14 +81,21 @@ export const HeroCarousel: React.FC = () => {
           key={slide.id}
           className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === current ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
         >
-          <img src={slide.image} alt={slide.title} className="w-full h-full object-cover opacity-60" />
+          {slide.image.match(/\.(mp4|webm|ogg)$/i) ? (
+            <video src={slide.image} autoPlay loop muted playsInline className="w-full h-full object-cover opacity-60" />
+          ) : (
+            <img src={slide.image} alt={slide.title} className="w-full h-full object-cover opacity-60" />
+          )}
           <div className="absolute inset-0 flex flex-col justify-center items-start text-white px-12 md:px-24 max-w-5xl">
             <span className="text-blue-300 font-semibold tracking-wider mb-2 uppercase text-sm drop-shadow-md">Featured Event</span>
             <h2 className="text-4xl md:text-6xl font-extrabold mb-4 leading-tight drop-shadow-lg">{slide.title}</h2>
             <p className="text-xl md:text-2xl mb-2 font-light drop-shadow-md">{slide.subtitle}</p>
             <p className="text-lg font-medium mb-8 opacity-90 drop-shadow-md">{slide.date}</p>
             
-            <button className="group/btn relative px-8 py-4 bg-primary text-white font-bold text-lg rounded-full overflow-hidden shadow-xl hover:shadow-primary/50 transition-all">
+            <button 
+              onClick={() => navigate(`/event?id=${slide.id}&slug=${slide.slug}`)}
+              className="group/btn relative px-8 py-4 bg-primary text-white font-bold text-lg rounded-full overflow-hidden shadow-xl hover:shadow-primary/50 transition-all"
+            >
               <div className="absolute inset-0 w-full h-full bg-white/20 transform scale-x-0 origin-left group-hover/btn:scale-x-100 transition-transform duration-300 ease-out"></div>
               <span className="relative flex items-center gap-2">
                 View Event Details 

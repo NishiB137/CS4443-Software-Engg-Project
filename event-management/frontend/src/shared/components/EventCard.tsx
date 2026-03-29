@@ -23,7 +23,11 @@ export const EventCard: React.FC<EventCardProps> = ({
       
       {/* Image Container */}
       <div className="relative overflow-hidden h-52">
-        <img src={imageUrl} alt={title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        {imageUrl.match(/\.(mp4|webm|ogg)$/i) ? (
+          <video src={imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        ) : (
+          <img src={imageUrl} alt={title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        )}
         
         {/* Permanent Top Gradient for Text/Icon Contrast */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-transparent h-24 pointer-events-none"></div>

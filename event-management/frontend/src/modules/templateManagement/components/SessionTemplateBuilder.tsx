@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
 import type { SessionTemplate } from '@/services/api';
+import { FieldBuilder } from './FieldBuilder';
+import { mergeSessionSystemFields, SESSION_SYSTEM_FIELD_KEYS, DEFAULT_SESSION_LAYOUT } from '@/shared/template/sessionSystemFields';
 
-const SESSION_TYPES = [
-  { value: 'keynote',           label: 'Keynote' },
-  { value: 'panel',             label: 'Panel Discussion' },
-  { value: 'workshop',          label: 'Workshop' },
-  { value: 'networking',        label: 'Networking' },
-  { value: 'performance',       label: 'Performance' },
-  { value: 'competition_round', label: 'Competition Round' },
-  { value: 'break',             label: 'Break / Intermission' },
-  { value: 'other',             label: 'Other' },
-];
 
-const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none bg-white transition';
-const lbl = 'block text-xs font-medium text-gray-600 mb-1';
 
 const EMPTY: SessionTemplate = {
   title: '', sessionType: 'other', defaultDurationMinutes: 60, description: '', defaultFields: [],
@@ -89,39 +79,38 @@ export const SessionTemplateBuilder: React.FC<Props> = ({ sessions, onChange, re
 
               {expanded === idx && (
                 <div className="p-4 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-2">
-                      <label className={lbl}>Session Title <span className="text-red-500">*</span></label>
-                      <input type="text" className={inp} value={s.title} placeholder="e.g. Opening Keynote"
-                        disabled={readOnly}
-                        onChange={(e) => update(idx, { ...s, title: e.target.value })} />
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wide">Session Fields Configuration</h4>
+                        <p className="text-[11px] text-gray-500 mt-0.5">Configure default values and additional fields for this session type.</p>
+                      </div>
                     </div>
-                    <div>
-                      <label className={lbl}>Session Type</label>
-                      <select className={inp} value={s.sessionType} disabled={readOnly}
-                        onChange={(e) => update(idx, { ...s, sessionType: e.target.value })}>
-                        {SESSION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={lbl}>Default Duration (minutes)</label>
-                      <input type="number" className={inp} min={5} max={1440} value={s.defaultDurationMinutes}
-                        disabled={readOnly}
-                        onChange={(e) => update(idx, { ...s, defaultDurationMinutes: Number(e.target.value) })} />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className={lbl}>Description</label>
-                      <input type="text" className={inp} value={s.description || ''} placeholder="Brief description of this session type"
-                        disabled={readOnly}
-                        onChange={(e) => update(idx, { ...s, description: e.target.value })} />
-                    </div>
-                  </div>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <FieldBuilder
+                        fields={mergeSessionSystemFields(s.defaultFields)}
+                        layout={s.layout || DEFAULT_SESSION_LAYOUT}
+                        onLayoutChange={(nextLayout) => update(idx, { ...s, layout: nextLayout })}
+                        onChange={(nextFields) => {
+                          const titleF = nextFields.find(f => f.key === 'title');
+                          const typeF = nextFields.find(f => f.key === 'sessionType');
+                          const descF = nextFields.find(f => f.key === 'description');
+                          const durF = nextFields.find(f => f.key === 'defaultDurationMinutes');
 
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                    <p className="text-xs text-gray-600">
-                      Session templates are intentionally simple: title, type, duration, and description.
-                      Additional fields can be filled directly during event session creation.
-                    </p>
+                          update(idx, {
+                            ...s,
+                            defaultFields: nextFields,
+                            title: titleF?.defaultValue || titleF?.placeholder || s.title,
+                            sessionType: typeF?.defaultValue || s.sessionType,
+                            description: descF?.defaultValue || s.description,
+                            defaultDurationMinutes: Number(durF?.defaultValue || s.defaultDurationMinutes),
+                          });
+                        }}
+                        systemFieldKeys={SESSION_SYSTEM_FIELD_KEYS}
+                        readOnly={readOnly}
+                        isSessionTemplate={true}
+                      />
+                    </div>
                   </div>
                 </div>
               )}

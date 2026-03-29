@@ -11,6 +11,7 @@ router.post('/',                 eventController.createEvent);
 // NOTE: /slug/:slug MUST come before /:id — otherwise Express matches "slug" as the :id param
 router.get('/slug/:slug',        eventController.getEventBySlug);
 router.post('/:id/like',         eventController.likeEvent);
+router.post('/:id/view',         eventController.incrementView);
 router.get('/:id',               eventController.getEvent);
 router.put('/:id',               eventController.updateEvent);
 router.delete('/:id',            eventController.deleteEvent);

@@ -1,5 +1,7 @@
 import React from 'react';
+import { LIMITS } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import type { WizardStepProps } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
+import { uploadApi } from '@/services/api';
 
 interface GenericFormStepProps extends WizardStepProps {
   formName: string;
@@ -35,17 +37,23 @@ const CharCount: React.FC<{ current: number; max: number }> = ({ current, max })
 };
 
 export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data, updateData, errors = {} }) => {
+  const [uploadingField, setUploadingField] = React.useState<string | null>(null);
   const fields = data.templateFields.filter(f => f.form === formName);
 
   const getSystemValue = (key: string): string => {
-    if (key.startsWith('venue_')) return data.venue[key.replace('venue_', '') as keyof typeof data.venue];
+    if (key.startsWith('venue_')) return data.venue[key.replace('venue_', '') as keyof typeof data.venue] ?? '';
     if (key === 'refundPolicy' || key === 'cancellationPolicy' || key === 'attendeeMinAge') return data.policies[key as keyof typeof data.policies] as string;
+    if (key === 'shareOnlineLinkLater') return data.venue.shareOnlineLinkLater ?? '';
     return (data as any)[key] as string;
   };
 
   const setSystemValue = (key: string, value: string) => {
     if (key.startsWith('venue_')) {
       updateData({ venue: { ...data.venue, [key.replace('venue_', '')]: value } });
+      return;
+    }
+    if (key === 'shareOnlineLinkLater') {
+      updateData({ venue: { ...data.venue, shareOnlineLinkLater: value } });
       return;
     }
     if (key === 'refundPolicy' || key === 'cancellationPolicy' || key === 'attendeeMinAge') {
@@ -62,95 +70,186 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
     'title', 'description', 'shortDescription', 'eventType', 'format', 'isFree',
     'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity',
     'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country',
-    'onlineLink', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge'
+    'onlineLink', 'shareOnlineLinkLater', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge',
+    'coverImage', 'bannerImage', 'videoUrl'
   ]);
+
+  const categories = data.templateLayout?.forms?.find(f => f.name === formName)?.categories || [];
+  const categoriesMap = fields.reduce<Record<string, typeof fields>>((acc, f) => {
+    const cat = f.category || 'General';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(f);
+    return acc;
+  }, {});
+
+  const sortedCategoryNames = Object.keys(categoriesMap).sort((a, b) => {
+    const c1 = categories.find(c => c.name === a);
+    const c2 = categories.find(c => c.name === b);
+    
+    const orderA = c1?.order ?? categoriesMap[a][0]?.categoryOrder ?? 999;
+    const orderB = c2?.order ?? categoriesMap[b][0]?.categoryOrder ?? 999;
+    
+    return orderA - orderB || a.localeCompare(b);
+  });
+
+  const forms = data.templateLayout?.forms ?? [];
+  const formIndex = forms.findIndex(f => f.name === formName);
+  const formNumber = formIndex >= 0 ? formIndex + 1 : 1;
 
   return (
     <div className="max-w-3xl mx-auto animate-fadeIn">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">{formName}</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-6">{formNumber}. {formName}</h2>
       
-      <div className="space-y-5">
-        {fields.map(f => {
-          const isSystem = systemFieldKeys.has(f.key);
-          const val = isSystem ? getSystemValue(f.key) : getCustomValue(f.key);
-          const setVal = (v: string) => isSystem ? setSystemValue(f.key, v) : setCustomValue(f.key, v);
-          const hasError = !!errors[f.key];
-
-          const common = {
-            className: inputCls(hasError),
-            value: val,
-            onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setVal(e.target.value),
-          };
-
+      <div className="space-y-8">
+        {sortedCategoryNames.map((categoryName) => {
+          const catFields = categoriesMap[categoryName];
+          const catIndex = (forms[formIndex]?.categories?.findIndex(c => c.name === categoryName) ?? -1) + 1;
+          const catNumberStr = catIndex > 0 ? `${formNumber}.${catIndex}. ` : '';
           return (
-            <div key={f.key}>
-              <label className={labelCls}>
-                {f.label}
-                {f.required && <span className="text-red-500"> *</span>}
-                {f.maxLength && <span className="text-gray-400 font-normal ml-1">(max {f.maxLength})</span>}
-              </label>
-
-              {f.helpText && <p className="text-xs text-gray-400 mb-1">{f.helpText}</p>}
-
-              {/* Special rendering for certain UI hints */}
-              {f.fieldType === 'textarea' ? (
-                <div>
-                  <textarea rows={5} placeholder={f.placeholder} maxLength={f.maxLength} {...common} />
-                  <div className="flex items-start justify-between">
-                    <FieldError msg={errors[f.key]} />
-                    {f.maxLength && <CharCount current={val.length} max={f.maxLength} />}
-                  </div>
-                </div>
-              ) : f.fieldType === 'select' ? (
-                <div>
-                  <select {...common}>
-                    <option value="">Select</option>
-                    {(f.options ?? []).map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                  <FieldError msg={errors[f.key]} />
-                </div>
-              ) : f.fieldType === 'toggle' ? (
-                <div>
-                  <div className="flex items-center gap-3 mt-1">
-                    <input
-                      type="checkbox"
-                      checked={val === 'true'}
-                      onChange={(e) => setVal(e.target.checked ? 'true' : 'false')}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-600">{val === 'true' ? 'Yes' : 'No'}</span>
-                  </div>
-                  <FieldError msg={errors[f.key]} />
-                </div>
-              ) : (
-                <div>
-                  <input
-                    type={
-                      f.fieldType === 'number' ? 'number'
-                        : f.fieldType === 'url' ? 'url'
-                          : f.fieldType === 'email' ? 'email'
-                            : f.fieldType === 'phone' ? 'tel'
-                              : f.fieldType === 'date' ? 'date'
-                                : f.fieldType === 'time' ? 'time'
-                                  : 'text'
-                    }
-                    placeholder={f.placeholder}
-                    maxLength={f.maxLength}
-                    min={f.fieldType === 'number' || f.fieldType === 'date' ? f.min : undefined}
-                    max={f.fieldType === 'number' || f.fieldType === 'date' ? f.max : undefined}
-                    {...common}
-                  />
-                  <div className="flex items-start justify-between">
-                    <FieldError msg={errors[f.key]} />
-                    {f.maxLength && f.fieldType !== 'date' && f.fieldType !== 'time' && <CharCount current={val.length} max={f.maxLength} />}
-                  </div>
-                </div>
-              )}
+          <div key={categoryName} className="bg-white p-5 md:p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group">
+            <div className="mb-5 pb-3 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{catNumberStr}{categoryName}</h3>
             </div>
-          );
-        })}
+            <div className="space-y-5">
+              {catFields.map((f, fIdx) => {
+                const isSystem = systemFieldKeys.has(f.key);
+                const val = isSystem ? getSystemValue(f.key) : getCustomValue(f.key);
+                const setVal = (v: string) => isSystem ? setSystemValue(f.key, v) : setCustomValue(f.key, v);
+                const hasError = !!errors[f.key];
+                const fieldNumberStr = catIndex > 0 ? `${formNumber}.${catIndex}.${fIdx + 1}. ` : '';
+
+                const resolvedMin = typeof f.min === 'number' ? f.min : (LIMITS[f.key as keyof typeof LIMITS] as any)?.min;
+                const resolvedMax = f.maxLength || f.max || (LIMITS[f.key as keyof typeof LIMITS] as any)?.max;
+
+                const common = {
+                  className: inputCls(hasError),
+                  value: val,
+                  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setVal(e.target.value),
+                };
+
+                return (
+                  <div key={f.key}>
+                    <label className={labelCls}>
+                      {fieldNumberStr}{f.label}
+                      {f.required && <span className="text-red-500"> *</span>}
+                    </label>
+
+                    {f.helpText && <p className="text-xs text-gray-400 mb-1">{f.helpText}</p>}
+                    {(f.fieldType === 'text' || f.fieldType === 'textarea') && resolvedMax && (
+                      <p className="text-xs text-gray-400 mb-2 italic">
+                        {resolvedMin ? `Min: ${resolvedMin} chars, ` : ''}Max: {resolvedMax} chars
+                      </p>
+                    )}
+
+                    {/* Special rendering for certain UI hints */}
+                    {f.fieldType === 'textarea' ? (
+                      <div>
+                        <textarea rows={5} placeholder={f.placeholder} maxLength={f.maxLength} {...common} />
+                        <div className="flex items-start justify-between">
+                          <FieldError msg={errors[f.key]} />
+                          {f.maxLength && <CharCount current={val.length} max={f.maxLength} />}
+                        </div>
+                      </div>
+                    ) : f.fieldType === 'select' ? (
+                      <div>
+                        <select {...common}>
+                          <option value="">Select</option>
+                          {(f.options ?? []).map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                        <FieldError msg={errors[f.key]} />
+                      </div>
+                    ) : f.fieldType === 'toggle' ? (
+                      <div>
+                        <div className="flex items-center mt-1">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={val === 'true'}
+                            onClick={() => setVal(val === 'true' ? 'false' : 'true')}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${val === 'true' ? 'bg-blue-600' : 'bg-gray-200'}`}
+                          >
+                            <span className="sr-only">Toggle {f.label}</span>
+                            <span
+                              aria-hidden="true"
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${val === 'true' ? 'translate-x-5' : 'translate-x-0'}`}
+                            />
+                          </button>
+                          <span className="ml-3 text-sm font-medium text-gray-900">{val === 'true' ? 'Yes' : 'No'}</span>
+                        </div>
+                        <FieldError msg={errors[f.key]} />
+                      </div>
+                    ) : f.fieldType === 'file_image' || f.fieldType === 'file_video' ? (
+                      <div>
+                        {val && (
+                          <div className="mb-3">
+                            {f.fieldType === 'file_image' ? (
+                              <img src={val} alt="Preview" className="w-32 h-24 object-cover rounded-lg border border-gray-200 shadow-sm" />
+                            ) : (
+                              <div className="w-32 h-24 bg-gray-100 flex items-center justify-center rounded border border-gray-200 overflow-hidden">
+                                <video src={val} className="w-full h-full object-cover opacity-50" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <label className="block w-full cursor-pointer bg-white border border-gray-300 hover:bg-gray-50 border-dashed rounded-lg px-4 py-3 text-center transition">
+                          <span className="text-sm font-medium text-blue-600">
+                            {uploadingField === f.key ? 'Uploading to S3...' : (val ? 'Change File' : `Upload ${f.fieldType === 'file_image' ? 'Image' : 'Video'}`)}
+                          </span>
+                          <input
+                            type="file"
+                            accept={f.fieldType === 'file_image' ? 'image/*' : 'video/mp4,video/webm'}
+                            className="hidden"
+                            disabled={!!uploadingField}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                setUploadingField(f.key);
+                                const url = await uploadApi.uploadFile(file);
+                                setVal(url);
+                              } catch (err: any) {
+                                alert('Upload failed: ' + err.message);
+                              } finally {
+                                setUploadingField(null);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                        </label>
+                        <FieldError msg={errors[f.key]} />
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type={
+                            f.fieldType === 'number' ? 'number'
+                              : f.fieldType === 'url' ? 'url'
+                                : f.fieldType === 'email' ? 'email'
+                                  : f.fieldType === 'phone' ? 'tel'
+                                    : f.fieldType === 'date' ? 'date'
+                                      : f.fieldType === 'time' ? 'time'
+                                        : 'text'
+                          }
+                          placeholder={f.placeholder}
+                          maxLength={f.maxLength}
+                          min={f.fieldType === 'number' || f.fieldType === 'date' ? f.min : undefined}
+                          max={f.fieldType === 'number' || f.fieldType === 'date' ? f.max : undefined}
+                          {...common}
+                        />
+                        <div className="flex items-start justify-between">
+                          <FieldError msg={errors[f.key]} />
+                          {f.maxLength && f.fieldType !== 'date' && f.fieldType !== 'time' && <CharCount current={val.length} max={f.maxLength} />}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )})}
       </div>
     </div>
   );
