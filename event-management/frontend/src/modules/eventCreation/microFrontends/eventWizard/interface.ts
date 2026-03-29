@@ -14,6 +14,7 @@ export interface SessionSpeaker {
 export interface SessionFormData {
   title: string;
   description: string;
+  notes: string;
   sessionType: 'keynote' | 'panel' | 'workshop' | 'networking' | 'performance' | 'competition_round' | 'break' | 'other';
   startDate: string;
   startTime: string;
@@ -29,6 +30,7 @@ export interface SessionFormData {
 export const EMPTY_SESSION: SessionFormData = {
   title: '',
   description: '',
+  notes: '',
   sessionType: 'other',
   startDate: '',
   startTime: '',
@@ -80,6 +82,10 @@ export interface EventFormData {
     maxLength?: number;
     section: string;
     order: number;
+    form?: string;
+    category?: string;
+    formOrder?: number;
+    categoryOrder?: number;
   }>;
   sessionTemplates: Array<{
     title: string;
@@ -95,6 +101,8 @@ export interface EventFormData {
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
+  tags: string[];
+  notes: string;
   startDate: string;
   startTime: string;
   endDate: string;
@@ -146,97 +154,101 @@ export const currentTime = (): string => {
 
 // ─── Validation rules per step ────────────────────────────────────────────────
 
+export interface StepDef {
+  id: string;
+  title: string;
+  type: 'template' | 'remarks' | 'form' | 'visibility' | 'sessions' | 'review';
+  formName?: string;
+}
+
 export const validateStep1 = (data: EventFormData): StepErrors => {
   const errors: StepErrors = {};
   if (!data.template) errors['template'] = 'Please select an event template to continue.';
   return errors;
 };
 
-export const validateStep2 = (data: EventFormData): StepErrors => {
-  const errors: StepErrors = {};
-
-  if (!data.title.trim())
-    errors['title'] = 'Event name is required.';
-  else if (data.title.trim().length < LIMITS.title.min)
-    errors['title'] = `Event name must be at least ${LIMITS.title.min} characters.`;
-  else if (data.title.trim().length > LIMITS.title.max)
-    errors['title'] = `Event name cannot exceed ${LIMITS.title.max} characters.`;
-
-  if (data.shortDescription.length > LIMITS.shortDescription.max)
-    errors['shortDescription'] = `Short description cannot exceed ${LIMITS.shortDescription.max} characters.`;
-
-  if (!data.description.trim())
-    errors['description'] = 'Full description is required.';
-  else if (data.description.trim().length < LIMITS.description.min)
-    errors['description'] = `Description must be at least ${LIMITS.description.min} characters.`;
-  else if (data.description.trim().length > LIMITS.description.max)
-    errors['description'] = `Description cannot exceed ${LIMITS.description.max.toLocaleString()} characters.`;
-
-  // ── Dates: both date and time parts required; guard against epoch ──
-  const hasStart = data.startDate.trim() !== '' && data.startTime.trim() !== '';
-  const hasEnd   = data.endDate.trim()   !== '' && data.endTime.trim()   !== '';
-
-  if (!hasStart)
-    errors['startDate'] = 'Start date and time are both required.';
-
-  if (!hasEnd)
-    errors['endDate'] = 'End date and time are both required.';
-
-  if (hasStart && hasEnd) {
-    const start = new Date(combineDatetime(data.startDate, data.startTime));
-    const end   = new Date(combineDatetime(data.endDate,   data.endTime));
-    const now   = new Date();
-
-    if (isNaN(start.getTime()) || start.getFullYear() < 2000)
-      errors['startDate'] = 'Start date/time is not a valid date.';
-    else if (start < now)
-      errors['startDate'] = 'Start date and time cannot be in the past.';
-
-    if (isNaN(end.getTime()) || end.getFullYear() < 2000)
-      errors['endDate'] = 'End date/time is not a valid date.';
-    else if (!errors['startDate'] && end <= start)
-      errors['endDate'] = 'End date/time must be after the start date/time.';
-  }
-
-  if (data.maxCapacity) {
-    const cap = Number(data.maxCapacity);
-    if (!Number.isInteger(cap) || cap < LIMITS.maxCapacity.min)
-      errors['maxCapacity'] = `Capacity must be a whole number of at least ${LIMITS.maxCapacity.min}.`;
-    else if (cap > LIMITS.maxCapacity.max)
-      errors['maxCapacity'] = `Capacity cannot exceed ${LIMITS.maxCapacity.max.toLocaleString()}.`;
-  }
-
-  if ((data.format === 'virtual' || data.format === 'hybrid') && !data.venue.onlineLink.trim())
-    errors['onlineLink'] = 'An online event link is required for virtual / hybrid events.';
-
-  if (data.venue.onlineLink.trim() && !/^https?:\/\/.+/.test(data.venue.onlineLink))
-    errors['onlineLink'] = 'Online link must start with http:// or https://';
-
-  const venueFields: Array<keyof typeof data.venue> = ['name', 'address', 'city', 'state', 'country'];
-  for (const f of venueFields) {
-    if ((data.venue[f] as string).length > LIMITS.venueField.max)
-      errors[`venue_${f}`] = `${f.charAt(0).toUpperCase() + f.slice(1)} cannot exceed ${LIMITS.venueField.max} characters.`;
-  }
-
-  return errors;
-};
-
-export const validateStep3 = (): StepErrors => ({});
-
 export const validateStep4 = (data: EventFormData): StepErrors => {
   const errors: StepErrors = {};
-
-  if (data.policies.cancellationPolicy.length > LIMITS.cancellationPolicy.max)
-    errors['cancellationPolicy'] = `Cancellation policy cannot exceed ${LIMITS.cancellationPolicy.max} characters.`;
-
-  // Validate whenever the field has a non-empty value (including "0")
-  if (data.policies.attendeeMinAge.trim() !== '') {
-    const age = Number(data.policies.attendeeMinAge);
-    if (!Number.isInteger(age) || isNaN(age) || age < LIMITS.attendeeMinAge.min || age > LIMITS.attendeeMinAge.max)
-      errors['attendeeMinAge'] = `Minimum age must be a whole number between ${LIMITS.attendeeMinAge.min} and ${LIMITS.attendeeMinAge.max}.`;
-  }
-
+  data.sessions.forEach((s, idx) => {
+    if (!s.title.trim()) errors[`session_${idx}_title`] = `Session ${idx + 1}: title is required.`;
+    if (!s.startDate || !s.startTime) errors[`session_${idx}_start`] = `Session ${idx + 1}: start date/time is required.`;
+    if (!s.endDate || !s.endTime) errors[`session_${idx}_end`] = `Session ${idx + 1}: end date/time is required.`;
+  });
   return errors;
 };
 
-export const STEP_VALIDATORS = [validateStep1, validateStep2, validateStep3, validateStep4];
+export const validateStep = (step: StepDef, data: EventFormData): StepErrors => {
+  if (step.type === 'template') return validateStep1(data);
+  if (step.type === 'remarks') return {};
+  if (step.type === 'visibility') return {};
+  if (step.type === 'sessions') return validateStep4(data);
+  if (step.type === 'review') return {};
+
+  if (step.type === 'form' && step.formName) {
+    const errors: StepErrors = {};
+    const fieldsInForm = data.templateFields.filter(f => f.form === step.formName);
+    const fieldKeys = new Set(fieldsInForm.map(f => f.key));
+
+    for (const f of fieldsInForm) {
+      const val = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge'].includes(f.key)
+        ? (() => {
+            if (f.key.startsWith('venue_')) return data.venue[f.key.replace('venue_', '') as keyof typeof data.venue];
+            if (f.key === 'refundPolicy' || f.key === 'cancellationPolicy' || f.key === 'attendeeMinAge') return data.policies[f.key as keyof typeof data.policies];
+            return (data as any)[f.key];
+          })()
+        : data.customFieldValues[f.key];
+
+      const strVal = String(val ?? '').trim();
+
+      if (f.required && !strVal) {
+        errors[f.key] = `${f.label} is required.`;
+      }
+      if (f.maxLength && strVal.length > f.maxLength) {
+        errors[f.key] = `${f.label} cannot exceed ${f.maxLength} characters.`;
+      }
+      if (f.fieldType === 'number' && strVal) {
+        const numVal = Number(strVal);
+        const mn = typeof f.min === 'number' ? f.min : (LIMITS[f.key as keyof typeof LIMITS] as any)?.min;
+        const mx = typeof f.max === 'number' ? f.max : (LIMITS[f.key as keyof typeof LIMITS] as any)?.max;
+        if (mn !== undefined && numVal < mn) errors[f.key] = `${f.label} minimum is ${mn}.`;
+        if (mx !== undefined && numVal > mx) errors[f.key] = `${f.label} cannot exceed ${mx}.`;
+      }
+    }
+
+    if (fieldKeys.has('title') && data.title.trim() && data.title.trim().length < LIMITS.title.min)
+      errors['title'] = `Event name must be at least ${LIMITS.title.min} characters.`;
+
+    if (fieldKeys.has('description') && data.description.trim() && data.description.trim().length < LIMITS.description.min)
+      errors['description'] = `Description must be at least ${LIMITS.description.min} characters.`;
+
+    const hasStart = fieldKeys.has('startDate') || fieldKeys.has('startTime');
+    const hasEnd = fieldKeys.has('endDate') || fieldKeys.has('endTime');
+
+    if (hasStart || hasEnd) {
+      const startStr = data.startDate.trim() !== '' && data.startTime.trim() !== '' ? combineDatetime(data.startDate, data.startTime) : null;
+      const endStr = data.endDate.trim() !== '' && data.endTime.trim() !== '' ? combineDatetime(data.endDate, data.endTime) : null;
+
+      const start = startStr ? new Date(startStr) : null;
+      const end = endStr ? new Date(endStr) : null;
+      const now = new Date();
+
+      if (hasStart && start) {
+        if (isNaN(start.getTime()) || start.getFullYear() < 2000) errors['startDate'] = 'Start date/time is not a valid date.';
+        else if (start < now) errors['startDate'] = 'Start date and time cannot be in the past.';
+      }
+
+      if (hasEnd && end) {
+        if (isNaN(end.getTime()) || end.getFullYear() < 2000) errors['endDate'] = 'End date/time is not a valid date.';
+        else if (startStr && !errors['startDate'] && start && end <= start) errors['endDate'] = 'End date/time must be after the start date/time.';
+      }
+    }
+
+    if (fieldKeys.has('onlineLink') && data.venue.onlineLink.trim() && !/^https?:\/\/.+/.test(data.venue.onlineLink)) {
+      errors['onlineLink'] = 'Online link must start with http:// or https://';
+    }
+
+    return errors;
+  }
+
+  return {};
+};

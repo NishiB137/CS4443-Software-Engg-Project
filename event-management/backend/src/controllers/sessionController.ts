@@ -7,19 +7,14 @@ const DEV_USER_ID = '000000000000000000000001';
 const param = (req: Request, key: string): string =>
   (Array.isArray(req.params[key]) ? req.params[key][0] : req.params[key]) ?? '';
 
-import { Session } from '../models/Session.js';
-
-
 export const createSession = async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
-    const session = new Session({
+    const session = await sessionService.createSession({
       ...req.body,
       event: eventId,
       createdBy: req.body.createdBy || DEV_USER_ID,
     });
-
-    await session.save();
     res.status(201).json({ success: true, data: session });
   } catch (err) {
     res.status(400).json({ success: false, message: err instanceof Error ? err.message : 'Server error' });

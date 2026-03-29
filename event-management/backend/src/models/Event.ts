@@ -36,6 +36,7 @@ export interface IEvent extends Document {
   format: 'physical' | 'virtual' | 'hybrid';
   tags: mongoose.Types.ObjectId[];
   isFree: boolean;
+  notes?: string;
 
   venue: {
     name?: string; address?: string; city?: string; state?: string;
@@ -98,6 +99,7 @@ const EventSchema = new Schema<IEvent>({
   format:    { type: String, enum: ['physical', 'virtual', 'hybrid'], default: 'physical' },
   tags:      [{ type: Schema.Types.ObjectId, ref: 'Tag' }],
   isFree:    { type: Boolean, default: false },
+  notes:     { type: String, maxlength: 2000 },
   venue: { name: { type: String }, address: { type: String }, city: { type: String }, state: { type: String }, country: { type: String }, postalCode: { type: String }, coordinates: { lat: { type: Number }, lng: { type: Number } }, onlineLink: { type: String } },
   startDate:             { type: Date, required: true },
   endDate:               { type: Date, required: true },

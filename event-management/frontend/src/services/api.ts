@@ -86,6 +86,8 @@ export interface CreateEventPayload {
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
+  tags?: string[];
+  notes?: string;
   startDate: string;
   endDate: string;
   timezone?: string;
@@ -104,6 +106,28 @@ export interface CreateEventPayload {
   organizerName?: string;
   policies?: Record<string, unknown>;
   faqs?: Array<{ question: string; answer: string }>;
+  sessions?: Array<{
+    title: string;
+    description?: string;
+    notes?: string;
+    sessionType?: string;
+    startTime: string;
+    endTime: string;
+    timezone?: string;
+    room?: string;
+    streamUrl?: string;
+    maxAttendees?: number;
+    speakers?: Array<{
+      name?: string;
+      bio?: string;
+      designation?: string;
+      organization?: string;
+      avatarUrl?: string;
+      topic?: string;
+    }>;
+    tags?: string[];
+    order?: number;
+  }>;
   // Sprint 2: passed directly until auth is wired up
   organization?: string;
   createdBy?: string;

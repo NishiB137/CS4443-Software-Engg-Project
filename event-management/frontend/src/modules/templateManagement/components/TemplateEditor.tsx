@@ -91,10 +91,16 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
     if (!form.name?.trim()) { setSaveError('Template name is required.'); return; }
     setSaving(true); setSaveError(null);
     try {
+      const policyDefaults = {
+        refundPolicy: fields.find((f) => f.key === 'refundPolicy')?.defaultValue || form.defaultPolicies?.refundPolicy || 'no_refund',
+        cancellationPolicy: fields.find((f) => f.key === 'cancellationPolicy')?.defaultValue || form.defaultPolicies?.cancellationPolicy || '',
+        attendeeMinAge: Number(fields.find((f) => f.key === 'attendeeMinAge')?.defaultValue ?? form.defaultPolicies?.attendeeMinAge ?? 0),
+      };
+      const payload = { ...form, defaultPolicies: policyDefaults };
       if (isEdit) {
-        await templateApi.update(templateId!, form);
+        await templateApi.update(templateId!, payload);
       } else {
-        await templateApi.create(form);
+        await templateApi.create(payload);
       }
       navigate('/templates');
     } catch (e) {
@@ -294,74 +300,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
             onLayoutChange={(nextLayout) => upd({ layout: nextLayout })}
             onChange={(nextFields) => upd({ fields: nextFields as ApiTemplate['fields'] })}
             systemFieldKeys={SYSTEM_FIELD_KEYS}
-            extraCategoryContent={{
-              'About this event::Policies': (
-                <div className="space-y-5">
-                  <div className="bg-white border border-gray-200 rounded-xl p-5">
-                    <h3 className="text-sm font-bold text-gray-900 mb-4">Default Policies</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className={lbl}>Default Refund Policy</label>
-                        <select className={inp()} value={form.defaultPolicies?.refundPolicy || ''} disabled={viewOnly}
-                          onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, refundPolicy: e.target.value } })}>
-                          <option value="">None / ask organizer</option>
-                          <option value="full">Full refund</option>
-                          <option value="partial">Partial refund</option>
-                          <option value="no_refund">No refund</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className={lbl}>Default Minimum Attendee Age</label>
-                        <input type="number" className={inp()} min={0} max={120} disabled={viewOnly}
-                          value={form.defaultPolicies?.attendeeMinAge ?? 0}
-                          onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, attendeeMinAge: Number(e.target.value) } })} />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className={lbl}>Default Cancellation Policy</label>
-                        <textarea rows={3} className={inp()} maxLength={2000} disabled={viewOnly}
-                          value={form.defaultPolicies?.cancellationPolicy || ''}
-                          placeholder="Standard cancellation terms for this template..."
-                          onChange={(e) => upd({ defaultPolicies: { ...form.defaultPolicies, cancellationPolicy: e.target.value } })} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white border border-gray-200 rounded-xl p-5">
-                    <h3 className="text-sm font-bold text-gray-900 mb-4">Hierarchy & Structure</h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">Allow Sub-Events</p>
-                          <p className="text-xs text-gray-500 mt-0.5">Organizers can create nested sub-events under this event</p>
-                        </div>
-                        <button type="button"
-                          onClick={() => upd({ allowsSubEvents: !form.allowsSubEvents })}
-                          disabled={viewOnly}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            form.allowsSubEvents ? 'bg-blue-600' : 'bg-gray-300'
-                          } disabled:opacity-60`}>
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                            form.allowsSubEvents ? 'translate-x-6' : 'translate-x-1'
-                          }`} />
-                        </button>
-                      </div>
-
-                      {form.allowsSubEvents && (
-                        <div className="max-w-xs">
-                          <label className={lbl}>Max Sub-Event Depth (1–3)</label>
-                          <input type="number" className={inp()} min={1} max={3} value={form.maxSubEventDepth || 1}
-                            disabled={viewOnly}
-                            onChange={(e) => upd({ maxSubEventDepth: Math.min(3, Math.max(1, Number(e.target.value))) })} />
-                          <p className="text-xs text-gray-400 mt-1">
-                            1 = Event → Sub-events only · 2 = Event → Sub-events → Sub-sub-events
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ),
-            }}
+            extraCategoryContent={undefined}
             readOnly={viewOnly}
           />
         </div>

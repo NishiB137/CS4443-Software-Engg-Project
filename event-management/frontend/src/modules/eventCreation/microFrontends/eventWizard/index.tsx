@@ -2,16 +2,17 @@ import React from 'react';
 import { useEventWizard } from '@/modules/eventCreation/microFrontends/eventWizard/hooks/useEventWizard';
 import { Stepper } from '@/modules/eventCreation/components/Stepper.tsx';
 import { Step1Template } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step1Template';
-import { Step2BasicDetails } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step2BasicDetails';
+import { GenericFormStep } from '@/modules/eventCreation/microFrontends/eventWizard/components/GenericFormStep';
+import { StepRemarks } from '@/modules/eventCreation/microFrontends/eventWizard/components/StepRemarks';
 import { Step3Visibility } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step3Visibility';
+import { Step4Sessions } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Sessions';
 import { Step4Review } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Review';
-
-const STEPS = ['Template', 'Basic Details', 'Visibility', 'Review & Publish'];
 
 export const EventWizardMFE: React.FC = () => {
   const {
     currentStep,
     totalSteps,
+    steps,
     formData,
     updateFormData,
     nextStep,
@@ -28,21 +29,30 @@ export const EventWizardMFE: React.FC = () => {
       updateData: updateFormData,
       errors: stepErrors as Record<string, string>,
     };
-    switch (currentStep) {
-      case 1: return <Step1Template {...props} />;
-      case 2: return <Step2BasicDetails {...props} />;
-      case 3: return <Step3Visibility {...props} />;
-      case 4: return <Step4Review {...props} />;
+    
+    const stepDef = steps[currentStep - 1];
+    if (!stepDef) return null;
+
+    switch (stepDef.type) {
+      case 'template': return <Step1Template {...props} />;
+      case 'remarks': return <StepRemarks {...props} />;
+      case 'form': return <GenericFormStep formName={stepDef.formName!} {...props} />;
+      case 'visibility': return <Step3Visibility {...props} />;
+      case 'sessions': return <Step4Sessions {...props} />;
+      case 'review': return <Step4Review {...props} />;
       default: return null;
     }
   };
 
   const hasErrors = Object.keys(stepErrors).length > 0;
+  const stepTitles = steps.map(s => s.title);
 
   return (
-    <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-10 pb-24 relative min-h-[700px]">
+    <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-10 pb-36 relative min-h-screen flex flex-col">
 
-      <Stepper currentStep={currentStep} steps={STEPS} />
+      {currentStep > 1 && (
+        <Stepper currentStep={currentStep} steps={stepTitles} />
+      )}
 
       {/* Step-level error summary banner */}
       {hasErrors && (
@@ -61,15 +71,10 @@ export const EventWizardMFE: React.FC = () => {
         </div>
       )}
 
-      <div className="mt-6 mb-24">
-        {renderStepContent()}
-      </div>
-
-      {/* Submit-level error banner */}
       {submitError && (() => {
         const lines = submitError.split('\n').filter(Boolean);
         return (
-          <div className="mx-0 mb-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 flex items-start gap-2">
+          <div className="mt-3 mb-3 sticky top-2 z-20 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 flex items-start gap-2 max-h-56 overflow-auto">
             <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
             </svg>
@@ -83,6 +88,10 @@ export const EventWizardMFE: React.FC = () => {
           </div>
         );
       })()}
+
+      <div className="mt-6 mb-24">
+        {renderStepContent()}
+      </div>
 
       {/* Fixed Bottom Action Bar */}
       <div className="absolute bottom-0 left-0 w-full bg-gray-50 border-t border-gray-200 p-4 rounded-b-2xl flex justify-between items-center px-6 sm:px-10">

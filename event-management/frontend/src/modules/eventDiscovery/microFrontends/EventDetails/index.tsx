@@ -219,8 +219,14 @@ export const EventDetailsMFE: React.FC = () => {
             )}
 
             <p className="text-base font-medium opacity-90 flex flex-wrap items-center gap-3">
-              <span>📅 {event.dateInfo}</span>
-              <span>📍 {event.locationInfo}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25" /></svg>
+                {event.dateInfo}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+                {event.locationInfo}
+              </span>
             </p>
 
             <div className="flex flex-wrap gap-4 mt-4 text-sm font-semibold opacity-90">
@@ -347,6 +353,23 @@ export const EventDetailsMFE: React.FC = () => {
                   <div className="bg-background rounded-xl p-4 border border-border text-sm text-text-secondary">
                     <p className="text-text-primary font-semibold mb-1">📍 Venue</p>
                     <p>{event.locationInfo}</p>
+                    <div className="mt-2 flex gap-3">
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationInfo)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline text-xs"
+                      >
+                        Open in Google Maps
+                      </a>
+                      <button
+                        type="button"
+                        className="text-xs text-gray-600 underline"
+                        onClick={() => navigator.clipboard?.writeText(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationInfo)}`)}
+                      >
+                        Copy map link
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -712,6 +735,7 @@ export const EventDetailsMFE: React.FC = () => {
               src={event.organizer.logo}
               alt={event.organizer.name}
               className="w-16 h-16 rounded-full mx-auto mb-3 shadow-sm"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.name)}&background=2563EB&color=fff`; }}
             />
             <h4 className="font-bold text-lg text-text-primary">{event.organizer.name}</h4>
             <p className="text-sm text-text-secondary mb-4">{event.organizer.followers} Registered</p>

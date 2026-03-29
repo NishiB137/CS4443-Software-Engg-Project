@@ -22,6 +22,9 @@ export const SYSTEM_FIELDS: FieldSpec[] = [
   { key: 'onlineLink',       label: 'Online Event Link',  fieldType: 'url',      required: false, placeholder: 'https://zoom.us/j/...', section: 'venue', order: 25, helpText: 'Required for virtual and hybrid events', form: 'Basic Info', category: 'Venue', formOrder: 0, categoryOrder: 2 },
 
   { key: 'maxCapacity',      label: 'Maximum Capacity',   fieldType: 'number',   required: false, placeholder: 'Leave blank for unlimited', min: 1, max: 1000000, section: 'capacity', order: 30, form: 'Basic Info', category: 'Capacity', formOrder: 0, categoryOrder: 3 },
+  { key: 'refundPolicy',     label: 'Refund Policy',      fieldType: 'select',   required: false, section: 'policies', order: 40, options: ['full','partial','no_refund'], defaultValue: 'no_refund', form: 'About this event', category: 'Policies', formOrder: 1, categoryOrder: 0 },
+  { key: 'cancellationPolicy', label: 'Cancellation Policy', fieldType: 'textarea', required: false, section: 'policies', order: 41, maxLength: 2000, form: 'About this event', category: 'Policies', formOrder: 1, categoryOrder: 0 },
+  { key: 'attendeeMinAge',   label: 'Minimum Attendee Age', fieldType: 'number', required: false, section: 'policies', order: 42, min: 0, max: 120, defaultValue: '0', form: 'About this event', category: 'Policies', formOrder: 1, categoryOrder: 0 },
 ];
 
 export const SYSTEM_FIELD_KEYS = SYSTEM_FIELDS.map((f) => f.key);

@@ -1,5 +1,8 @@
 import { Event } from '../models/Event.js';
 import { Session } from '../models/Session.js';
+import mongoose from 'mongoose';
+import { Tag } from '../models/Tag.js';
+import { validateSessionBody } from './sessionService.js';
 
 /** UI category chips → eventType values (must match frontend UseEvents / Landing) */
 export const CATEGORY_EVENT_TYPES: Record<string, string[]> = {
@@ -105,8 +108,6 @@ const validateCreateBody = (body: CreateEventBody): void => {
 
   // ── Online link ──
   const onlineLink = asString(body.venue?.onlineLink);
-  if ((body.format === 'virtual' || body.format === 'hybrid') && !onlineLink.trim())
-    errors.push('An online event link is required for virtual and hybrid events.');
   if (onlineLink.trim() && !isValidUrl(onlineLink))
     errors.push('Online event link must start with http:// or https://');
 
@@ -159,23 +160,87 @@ export const createEvent = async (body: CreateEventBody) => {
   validateCreateBody(body);
 
   const slug = generateSlug(body.title);
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+    const tagIds: mongoose.Types.ObjectId[] = [];
+    for (const rawName of body.tags ?? []) {
+      const name = String(rawName || '').trim();
+      if (!name) continue;
+      const slugValue = generateSlug(name);
+      const tag = await Tag.findOneAndUpdate(
+        { slug: slugValue },
+        { $setOnInsert: { name, slug: slugValue, category: 'topic', usageCount: 0 }, $inc: { usageCount: 1 } },
+        { upsert: true, new: true, session }
+      );
+      if (tag?._id) tagIds.push(tag._id);
+    }
+    const validatedSessions = (body.sessions ?? []).map((s, idx) => {
+      validateSessionBody({
+        event: '000000000000000000000000',
+        title: s.title,
+        description: s.description,
+        notes: s.notes,
+        sessionType: s.sessionType,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        timezone: s.timezone,
+        room: s.room,
+        streamUrl: s.streamUrl,
+        maxAttendees: s.maxAttendees,
+        speakers: s.speakers,
+        tags: s.tags,
+        order: s.order ?? idx,
+        createdBy: body.createdBy,
+      });
+      return { ...s, order: s.order ?? idx };
+    });
 
-  const event = await Event.create({
-    ...body,
-    slug,
-    status:     body.status     ?? 'draft',
-    visibility: body.visibility ?? 'public',
-    changeLog: [{
-      changedBy:   body.createdBy,
-      changedAt:   new Date(),
-      field:       'status',
-      oldValue:    null,
-      newValue:    body.status ?? 'draft',
-      description: 'Event created',
-    }],
-  });
+    const [event] = await Event.create([{
+      ...body,
+      slug,
+      tags: tagIds,
+      sessions: undefined,
+      status: body.status ?? 'draft',
+      visibility: body.visibility ?? 'public',
+      changeLog: [{
+        changedBy: body.createdBy,
+        changedAt: new Date(),
+        field: 'status',
+        oldValue: null,
+        newValue: body.status ?? 'draft',
+        description: 'Event created',
+      }],
+    }], { session });
 
-  return event;
+    if (validatedSessions.length > 0) {
+      await Session.insertMany(validatedSessions.map((s) => ({
+        event: event._id,
+        createdBy: body.createdBy,
+        title: s.title,
+        description: s.description,
+        notes: s.notes,
+        sessionType: s.sessionType ?? 'other',
+        startTime: s.startTime,
+        endTime: s.endTime,
+        timezone: s.timezone ?? body.timezone ?? 'Asia/Kolkata',
+        room: s.room,
+        streamUrl: s.streamUrl,
+        maxAttendees: s.maxAttendees,
+        speakers: s.speakers,
+        tags: s.tags ?? [],
+        order: s.order ?? 0,
+      })), { session });
+    }
+
+    await session.commitTransaction();
+    return event;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
 };
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
@@ -218,12 +283,13 @@ export const listEvents = async (filters: {
   startDateTo?: string;
   /** User’s age — only events where required min age ≤ this (or unset / 0) */
   suitableForAge?: number;
+  tag?: string;
 }) => {
   const {
     status, visibility = 'public', isFree, search,
     organization, createdBy, page = 1, limit = 12,
     eventType, category, format,
-    startDateFrom, startDateTo, suitableForAge,
+    startDateFrom, startDateTo, suitableForAge, tag,
   } = filters;
 
   const safePage  = Math.max(1, Math.floor(page));
@@ -237,6 +303,10 @@ export const listEvents = async (filters: {
   if (createdBy)    query['createdBy']    = createdBy;
   if (search)       query['$text']        = { $search: search };
   if (format)       query['format']       = format;
+  if (tag) {
+    const tagDoc = await Tag.findOne({ slug: generateSlug(tag) }).select('_id').lean();
+    if (tagDoc?._id) query['tags'] = tagDoc._id;
+  }
 
   if (eventType) {
     query['eventType'] = eventType;

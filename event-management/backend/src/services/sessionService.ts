@@ -4,6 +4,7 @@ export interface CreateSessionBody {
   event: string;
   title: string;
   description?: string;
+  notes?: string;
   sessionType?: string;
   startTime: string;
   endTime: string;
@@ -32,7 +33,7 @@ const SESSION_LIMITS = {
   speakerBio:  { max: 500 },
 };
 
-const validateSessionBody = (body: CreateSessionBody): void => {
+export const validateSessionBody = (body: CreateSessionBody): void => {
   const errors: string[] = [];
 
   if (!body.title?.trim())

@@ -46,6 +46,7 @@ export const listEvents = async (req: Request, res: Response) => {
       startDateFrom,
       startDateTo,
       suitableForAge,
+      tag,
     } = req.query;
 
     // exactOptionalPropertyTypes: only include keys whose value is not undefined
@@ -69,6 +70,7 @@ export const listEvents = async (req: Request, res: Response) => {
       const n = Number(suitableForAge);
       if (!Number.isNaN(n)) filters.suitableForAge = n;
     }
+    if (typeof tag === 'string') filters.tag = tag;
 
     const result = await eventService.listEvents(filters);
     res.json({ success: true, ...result });

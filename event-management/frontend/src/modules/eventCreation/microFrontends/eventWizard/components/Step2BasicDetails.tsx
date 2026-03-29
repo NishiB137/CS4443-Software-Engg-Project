@@ -103,6 +103,7 @@ const DateTimePicker: React.FC<DateTimePickerProps> = ({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData, errors = {} }) => {
+  const [tagInput, setTagInput] = React.useState('');
   const isVirtual      = data.format === 'virtual';
   const isHybrid       = data.format === 'hybrid';
   const needsOnlineLink = isVirtual || isHybrid;
@@ -268,6 +269,60 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
           )}
           </div>
         )}
+        <div>
+          <label className={labelCls}>Tags</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {data.tags.map((tag, i) => (
+              <span key={`${tag}-${i}`} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full border border-blue-100">
+                {tag}
+                <button type="button" onClick={() => updateData({ tags: data.tags.filter((_, idx) => idx !== i) })} className="text-blue-400 hover:text-blue-600">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Add tag"
+              className={inputCls()}
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const v = tagInput.trim();
+                  if (!v) return;
+                  if (!data.tags.includes(v)) updateData({ tags: [...data.tags, v] });
+                  setTagInput('');
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition"
+              onClick={() => {
+                const v = tagInput.trim();
+                if (!v) return;
+                if (!data.tags.includes(v)) updateData({ tags: [...data.tags, v] });
+                setTagInput('');
+              }}
+            >
+              Add
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-gray-400">These help users discover your event by keywords.</p>
+        </div>
+        <div>
+          <label className={labelCls}>Remarks / Notes</label>
+          <textarea
+            rows={2}
+            className={inputCls()}
+            placeholder="e.g. bring your laptop; install prerequisites before coming"
+            value={data.notes}
+            onChange={(e) => updateData({ notes: e.target.value })}
+          />
+        </div>
 
         {/* ── Start & End Date/Time ── */}
         {hasDates && (
@@ -422,7 +477,7 @@ export const Step2BasicDetails: React.FC<WizardStepProps> = ({ data, updateData,
         {needsOnlineLink && (
           <div>
             <label className={labelCls}>
-              Online Event Link <span className="text-red-500">*</span>
+              Online Event Link <span className="text-gray-400">(optional)</span>
             </label>
             <input
               type="url"

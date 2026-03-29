@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import type { SessionTemplate, FieldSpec } from '@/services/api';
-import { FieldBuilder } from './FieldBuilder';
+import type { SessionTemplate } from '@/services/api';
 
 const SESSION_TYPES = [
   { value: 'keynote',           label: 'Keynote' },
@@ -118,15 +117,11 @@ export const SessionTemplateBuilder: React.FC<Props> = ({ sessions, onChange, re
                     </div>
                   </div>
 
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Custom Fields for this Session Type</p>
-                    <FieldBuilder
-                      fields={s.defaultFields as FieldSpec[]}
-                      onChange={(fields) => update(idx, { ...s, defaultFields: fields as FieldSpec[] })}
-                      // Session template fields should not expose form/category layout controls
-                      onLayoutChange={undefined}
-                      readOnly={readOnly}
-                    />
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <p className="text-xs text-gray-600">
+                      Session templates are intentionally simple: title, type, duration, and description.
+                      Additional fields can be filled directly during event session creation.
+                    </p>
                   </div>
                 </div>
               )}

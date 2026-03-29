@@ -4,6 +4,7 @@ export interface ISession extends Document {
   event: mongoose.Types.ObjectId;
   title: string;
   description?: string;
+  notes?: string;
   sessionType: string;
   startTime: Date;
   endTime: Date;
@@ -35,6 +36,7 @@ const SessionSchema = new Schema<ISession>({
   event:       { type: Schema.Types.ObjectId, ref: 'Event', required: true },
   title:       { type: String, required: true, trim: true },
   description: { type: String },
+  notes:       { type: String, maxlength: 2000 },
   sessionType: { type: String, enum: ['keynote', 'panel', 'workshop', 'networking', 'performance', 'competition_round', 'break', 'other'], default: 'other' },
   startTime: { type: Date, required: true },
   endTime:   { type: Date, required: true },

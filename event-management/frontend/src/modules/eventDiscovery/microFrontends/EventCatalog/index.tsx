@@ -14,6 +14,7 @@ export const EventCatalogMFE: React.FC = () => {
     startDateFrom, setStartDateFrom,
     startDateTo, setStartDateTo,
     suitableForAge, setSuitableForAge,
+    tagFilter, setTagFilter,
     currentPage, setCurrentPage, totalPages,
   } = useEvents();
 
@@ -75,7 +76,7 @@ export const EventCatalogMFE: React.FC = () => {
       </div>
 
       {filtersOpen && (
-        <div className="mb-8 p-4 rounded-xl border border-border bg-surface shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mb-8 p-4 rounded-xl border border-border bg-surface shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1">Format</label>
             <select
@@ -119,6 +120,16 @@ export const EventCatalogMFE: React.FC = () => {
               className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
             />
             <p className="text-[10px] text-text-secondary mt-1">Shows events you can attend (required min age ≤ your age)</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">Tag</label>
+            <input
+              type="text"
+              placeholder="ai-ml"
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+            />
           </div>
         </div>
       )}

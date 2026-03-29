@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import type { WizardStepProps } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import { templateApi } from '@/services/api';
 import type { ApiTemplate } from '@/services/api';
-import { EMPTY_SESSION } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import { mergeSystemFields } from '@/shared/template/systemFields';
 
 // ─── Format badge ─────────────────────────────────────────────────────────────
@@ -92,6 +91,12 @@ const SkeletonCard: React.FC = () => (
 // ─── Main component ───────────────────────────────────────────────────────────
 export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, errors }) => {
   const [templates, setTemplates]   = useState<ApiTemplate[]>([]);
+  const [filtered, setFiltered] = useState<ApiTemplate[]>([]);
+  const [filters, setFilters] = useState<{ eventTypes: Array<{ value: string; label: string }>; tags: Array<{ value: string; label: string }> }>({ eventTypes: [], tags: [] });
+  const [q, setQ] = useState('');
+  const [eventType, setEventType] = useState('');
+  const [kind, setKind] = useState<'all' | 'default' | 'custom'>('all');
+  const [tag, setTag] = useState('');
   const [loading, setLoading]       = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -100,7 +105,23 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
       .then((res) => setTemplates(res.data))
       .catch((e) => setFetchError(e.message))
       .finally(() => setLoading(false));
+    templateApi.filters().then((res) => setFilters({
+      eventTypes: res.data.eventTypes,
+      tags: res.data.tags,
+    })).catch(() => {});
   }, []);
+  useEffect(() => {
+    let list = [...templates];
+    if (kind === 'default') list = list.filter((t) => t.isDefault);
+    if (kind === 'custom') list = list.filter((t) => !t.isDefault);
+    if (eventType) list = list.filter((t) => t.eventType === eventType);
+    if (tag) list = list.filter((t) => (t.tags || []).includes(tag));
+    if (q.trim()) {
+      const s = q.trim().toLowerCase();
+      list = list.filter((t) => `${t.name} ${t.description} ${t.eventType}`.toLowerCase().includes(s));
+    }
+    setFiltered(list);
+  }, [templates, kind, eventType, tag, q]);
 
   const handleSelect = (tpl: ApiTemplate) => {
     const mergedFields = mergeSystemFields(tpl.fields ?? []);
@@ -108,7 +129,7 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
     // Build default values for template custom fields
     const customFieldDefaults = Object.fromEntries(
       mergedFields
-        .filter((f) => f.section === 'custom')
+        .filter((f) => f.section === 'custom' || f.section === 'policies')
         .map((f) => [f.key, f.defaultValue ?? ''])
     );
 
@@ -122,13 +143,7 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
         defaultDurationMinutes: s.defaultDurationMinutes,
         description: s.description,
       })),
-      // Prefill sessions list from session templates so the user can edit immediately in Step 4
-      sessions: (tpl.sessionTemplates ?? []).map((s) => ({
-        ...EMPTY_SESSION,
-        title: s.title,
-        description: s.description ?? '',
-        sessionType: (s.sessionType as typeof EMPTY_SESSION.sessionType) ?? 'other',
-      })),
+      sessions: [],
       customFieldValues: customFieldDefaults,
       eventType:  tpl.eventType,
       format:     tpl.format as typeof data.format,
@@ -145,8 +160,8 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
     templateApi.use(tpl._id).catch(() => {});
   };
 
-  const systemTemplates = templates.filter((t) => t.isDefault);
-  const customTemplates  = templates.filter((t) => !t.isDefault);
+  const systemTemplates = filtered.filter((t) => t.isDefault);
+  const customTemplates  = filtered.filter((t) => !t.isDefault);
 
   const renderGrid = (list: ApiTemplate[]) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -199,6 +214,24 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
 
       {!loading && !fetchError && (
         <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search templates..." className="md:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+            <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option value="">All event types</option>
+              {filters.eventTypes.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <select value={tag} onChange={(e) => setTag(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option value="">All tags</option>
+              {filters.tags.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+          <div className="mb-5 max-w-xs">
+            <select value={kind} onChange={(e) => setKind(e.target.value as 'all' | 'default' | 'custom')} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="all">All</option>
+              <option value="default">Default</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
           {/* System templates */}
           {systemTemplates.length > 0 && (
             <div className="mb-7">
@@ -232,7 +265,6 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
         </>
       )}
 
-      {/* Validation error */}
       {errors?.['template'] && (
         <div className="mt-5 flex items-center justify-center gap-2 text-sm text-red-600 font-medium">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

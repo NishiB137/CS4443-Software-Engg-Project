@@ -94,6 +94,7 @@ export const useEvents = () => {
   const [startDateTo, setStartDateTo]     = useState('');
   /** empty = any; number = suitable for attendees of at least this age */
   const [suitableForAge, setSuitableForAge] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
   const [currentPage, setCurrentPage]   = useState(1);
   const [totalPages, setTotalPages]     = useState(1);
 
@@ -118,6 +119,7 @@ export const useEvents = () => {
         const n = Number(suitableForAge);
         if (!Number.isNaN(n)) params['suitableForAge'] = String(Math.min(120, Math.max(0, n)));
       }
+      if (tagFilter.trim()) params['tag'] = tagFilter.trim();
 
       const res = await eventApi.list(params);
 
@@ -132,7 +134,7 @@ export const useEvents = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, currentPage]);
+  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, tagFilter, currentPage]);
 
   useEffect(() => {
     const timer = setTimeout(fetchEvents, searchQuery ? 400 : 0);
@@ -142,7 +144,7 @@ export const useEvents = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge]);
+  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, tagFilter]);
 
   return {
     events, loading, error,
@@ -153,6 +155,7 @@ export const useEvents = () => {
     startDateFrom, setStartDateFrom,
     startDateTo, setStartDateTo,
     suitableForAge, setSuitableForAge,
+    tagFilter, setTagFilter,
     currentPage, setCurrentPage, totalPages,
     refetch: fetchEvents,
   };

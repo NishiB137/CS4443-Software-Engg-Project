@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { EventFormData, StepErrors } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
-import { STEP_VALIDATORS } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
-import { API_BASE_URL, eventApi } from '@/services/api';
+import type { EventFormData, StepErrors, StepDef } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
+import { validateStep } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
+import { eventApi } from '@/services/api';
 
 const INITIAL_DATA: EventFormData = {
   template: '',
@@ -16,6 +16,8 @@ const INITIAL_DATA: EventFormData = {
   eventType: 'other',
   format: 'physical',
   isFree: true,
+  tags: [],
+  notes: '',
   startDate: '',
   startTime: '',
   endDate: '',
@@ -33,9 +35,6 @@ const INITIAL_DATA: EventFormData = {
 };
 
 // ─── Safe ISO conversion ──────────────────────────────────────────────────────
-// Returns null if the date/time fields are incomplete or produce an invalid/epoch date.
-// An empty datetime-local input produces new Date("").toISOString() === epoch in some
-// environments — this guard ensures we never silently send 1970 to the backend.
 const safeISO = (date: string, time: string): string | null => {
   if (!date.trim() || !time.trim()) return null;
   const combined = `${date}T${time}`;
@@ -45,7 +44,6 @@ const safeISO = (date: string, time: string): string | null => {
   return d.toISOString();
 };
 
-// ─── Display formatter (no UTC shift) ────────────────────────────────────────
 export const formatLocalDatetime = (date: string, time: string): string => {
   if (!date) return '';
   const [year, month, day] = date.split('-').map(Number);
@@ -58,14 +56,6 @@ export const formatLocalDatetime = (date: string, time: string): string => {
   return d.toLocaleString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
-// ─── Collect all step errors across ALL steps ─────────────────────────────────
-const collectAllErrors = (formData: EventFormData): StepErrors => {
-  return STEP_VALIDATORS.reduce<StepErrors>((acc, validator) => {
-    if (!validator) return acc;
-    return { ...acc, ...validator(formData) };
-  }, {});
-};
-
 export const useEventWizard = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep]   = useState(1);
@@ -73,7 +63,28 @@ export const useEventWizard = () => {
   const [stepErrors, setStepErrors]     = useState<StepErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError]   = useState<string | null>(null);
-  const totalSteps = 4;
+
+  const steps = useMemo<StepDef[]>(() => {
+    const s: StepDef[] = [{ id: 'template', title: 'Template', type: 'template' }];
+    if (formData.template) {
+      s.push({ id: 'remarks', title: 'Remarks', type: 'remarks' });
+      // Identify distinct forms from template fields. Keep original defined order.
+      const forms = Array.from(new Set(formData.templateFields.map(f => f.form ?? 'Basic Info')));
+      forms.forEach(form => {
+        s.push({ id: `form-${form}`, title: form, type: 'form', formName: form });
+      });
+      s.push({ id: 'visibility', title: 'Visibility', type: 'visibility' });
+      s.push({ id: 'sessions', title: 'Sessions', type: 'sessions' });
+      s.push({ id: 'review', title: 'Review & Publish', type: 'review' });
+    }
+    return s;
+  }, [formData.template, formData.templateFields]);
+  
+  const totalSteps = steps.length;
+
+  const collectAllErrors = (data: EventFormData): StepErrors => {
+    return steps.reduce<StepErrors>((acc, step) => ({ ...acc, ...validateStep(step, data) }), {});
+  };
 
   const updateFormData = (fields: Partial<EventFormData>) => {
     setFormData((prev) => ({ ...prev, ...fields }));
@@ -86,8 +97,8 @@ export const useEventWizard = () => {
   };
 
   const nextStep = () => {
-    const validator = STEP_VALIDATORS[currentStep - 1];
-    const errors    = validator ? validator(formData) : {};
+    const currentStepDef = steps[currentStep - 1];
+    const errors = currentStepDef ? validateStep(currentStepDef, formData) : {};
     if (Object.keys(errors).length > 0) {
       setStepErrors(errors);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -108,7 +119,7 @@ export const useEventWizard = () => {
     if (Object.keys(allErrors).length > 0) {
       setStepErrors(allErrors);
       // Navigate back to the first step that has errors so the user sees them
-      const stepWithError = STEP_VALIDATORS.findIndex((v) => v && Object.keys(v(formData)).length > 0);
+      const stepWithError = steps.findIndex((step) => Object.keys(validateStep(step, formData)).length > 0);
       if (stepWithError >= 0) setCurrentStep(stepWithError + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setSubmitError('Please fix the highlighted errors before submitting.');
@@ -144,6 +155,8 @@ export const useEventWizard = () => {
         eventType:        formData.eventType,
         format:           formData.format,
         isFree:           formData.isFree,
+        tags:             formData.tags,
+        notes:            formData.notes.trim() || undefined,
         startDate:        startISO,
         endDate:          endISO,
         timezone:         formData.timezone,
@@ -175,7 +188,7 @@ export const useEventWizard = () => {
         faqs: formData.faqs.length > 0 ? formData.faqs : undefined,
         customFields: (() => {
           const customSpecs = formData.templateFields
-            .filter(f => f.section === 'custom')
+            .filter(f => f.section === 'custom' || f.section === 'policies')
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
           const out = customSpecs
             .map((s) => ({
@@ -188,66 +201,28 @@ export const useEventWizard = () => {
         })(),
       };
 
-      // ── Create event — if this throws, nothing is saved ──────────────────
-      const response = await eventApi.create(payload);
-      const eventId  = response.data._id;
-
-      // ── Create sessions (errors are non-fatal but reported) ───────────────
-      if (formData.sessions.length > 0) {
-        const sessionErrors: string[] = [];
-
-        await Promise.allSettled(
-          formData.sessions.map(async (session, idx) => {
-            const sStart = safeISO(session.startDate, session.startTime);
-            const sEnd   = safeISO(session.endDate,   session.endTime);
-
-            // Skip sessions with invalid dates rather than crash
-            if (!sStart || !sEnd) {
-              sessionErrors.push(`Session "${session.title || idx + 1}": invalid date/time — skipped.`);
-              return;
-            }
-
-            const res = await fetch(`${API_BASE_URL}/events/${eventId}/sessions`, {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title:        session.title.trim(),
-                description:  session.description.trim() || undefined,
-                sessionType:  session.sessionType,
-                startTime:    sStart,
-                endTime:      sEnd,
-                room:         session.room.trim()      || undefined,
-                streamUrl:    session.streamUrl.trim() || undefined,
-                maxAttendees: session.maxAttendees ? Number(session.maxAttendees) : undefined,
-                speakers:     session.speakers.length > 0 ? session.speakers : undefined,
-                tags:         session.tags.length > 0 ? session.tags : undefined,
-                order:        idx,
-              }),
-            });
-
-            if (!res.ok) {
-              const json = await res.json().catch(() => ({})) as { message?: string };
-              sessionErrors.push(
-                `Session "${session.title || idx + 1}": ${json.message ?? 'failed to save'}.`
-              );
-            }
-          })
-        );
-
-        // Event itself was saved — navigate and warn about session issues
-        if (sessionErrors.length > 0) {
-          console.warn('[sessions] Some sessions failed to save:', sessionErrors);
-          // Still navigate but surface the warning via state
-          navigate(`/event?id=${eventId}`, {
-            state: {
-              justCreated:    true,
-              status:         asDraft ? 'draft' : 'published',
-              sessionWarnings: sessionErrors,
-            },
-          });
-          return;
-        }
-      }
+      const response = await eventApi.create({
+        ...payload,
+        sessions: formData.sessions.map((session, idx) => {
+          const sStart = safeISO(session.startDate, session.startTime);
+          const sEnd = safeISO(session.endDate, session.endTime);
+          return {
+            title: session.title.trim(),
+            description: session.description.trim() || undefined,
+            notes: session.notes.trim() || undefined,
+            sessionType: session.sessionType,
+            startTime: sStart || '',
+            endTime: sEnd || '',
+            room: session.room.trim() || undefined,
+            streamUrl: session.streamUrl.trim() || undefined,
+            maxAttendees: session.maxAttendees ? Number(session.maxAttendees) : undefined,
+            speakers: session.speakers.length > 0 ? session.speakers : undefined,
+            tags: session.tags.length > 0 ? session.tags : undefined,
+            order: idx,
+          };
+        }),
+      } as any);
+      const eventId = response.data._id;
 
       navigate(`/event?id=${eventId}`, {
         state: { justCreated: true, status: asDraft ? 'draft' : 'published' },
@@ -267,6 +242,7 @@ export const useEventWizard = () => {
   return {
     currentStep,
     totalSteps,
+    steps,
     formData,
     updateFormData,
     nextStep,

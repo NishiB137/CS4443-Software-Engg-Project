@@ -274,28 +274,17 @@ export const TemplateListPage: React.FC = () => {
               className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none bg-white"
             />
           </div>
-          <div className="flex rounded-xl border border-gray-300 overflow-hidden bg-white">
-            {(
-              filters?.kinds ?? [
-                { value: 'all', label: 'All', count: 0 },
-                { value: 'default', label: 'Default', count: 0 },
-                { value: 'custom', label: 'Custom', count: 0 },
-              ]
-            ).map((k) => (
-              <button
-                key={k.value}
-                type="button"
-                onClick={() => setKind(k.value)}
-                className={`px-4 py-2.5 text-sm font-medium transition ${
-                  kind === k.value
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {k.label}
-              </button>
-            ))}
-          </div>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as 'all' | 'default' | 'custom')}
+            className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none"
+          >
+            {(filters?.kinds ?? [
+              { value: 'all', label: 'All', count: 0 },
+              { value: 'default', label: 'Default', count: 0 },
+              { value: 'custom', label: 'Custom', count: 0 },
+            ]).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}

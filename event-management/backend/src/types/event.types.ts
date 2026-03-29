@@ -7,6 +7,7 @@ export interface CreateEventBody {
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
+  notes?: string;
   startDate: string;
   endDate: string;
   timezone?: string;
@@ -43,6 +44,28 @@ export interface CreateEventBody {
   // Template + dynamic fields
   templateId?: string;
   customFields?: Array<{ key: string; label: string; value: unknown }>;
+  sessions?: Array<{
+    title: string;
+    description?: string;
+    notes?: string;
+    sessionType?: string;
+    startTime: string;
+    endTime: string;
+    timezone?: string;
+    room?: string;
+    streamUrl?: string;
+    maxAttendees?: number;
+    speakers?: Array<{
+      name?: string;
+      bio?: string;
+      designation?: string;
+      organization?: string;
+      avatarUrl?: string;
+      topic?: string;
+    }>;
+    tags?: string[];
+    order?: number;
+  }>;
 
   // For dev/sprint-2: org and user are passed directly (no auth yet)
   organization: string;

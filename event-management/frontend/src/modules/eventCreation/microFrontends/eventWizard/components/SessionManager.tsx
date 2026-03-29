@@ -268,6 +268,16 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
               onChange={(e) => update({ description: e.target.value })}
             />
           </div>
+          <div>
+            <label className={labelCls}>Remarks / Notes</label>
+            <textarea
+              rows={2}
+              placeholder="e.g. ask attendees to install required tools before coming"
+              className={inputCls()}
+              value={session.notes}
+              onChange={(e) => update({ notes: e.target.value })}
+            />
+          </div>
 
           {/* Start Date/Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -353,6 +363,16 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
               {errors.maxAttendees && <p className="text-xs text-red-600 mt-1">{errors.maxAttendees}</p>}
             </div>
           </div>
+          <div>
+            <label className={labelCls}>Tags (comma separated)</label>
+            <input
+              type="text"
+              placeholder="ai-ml, hands-on, beginner"
+              className={inputCls()}
+              value={session.tags.join(', ')}
+              onChange={(e) => update({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })}
+            />
+          </div>
 
           {/* Speakers toggle */}
           <div>
@@ -390,12 +410,27 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
 
 interface SessionManagerProps {
   sessions: SessionFormData[];
+  sessionTemplates?: Array<{ title: string; sessionType: string; defaultDurationMinutes: number; description?: string }>;
   onChange: (sessions: SessionFormData[]) => void;
 }
 
-export const SessionManager: React.FC<SessionManagerProps> = ({ sessions, onChange }) => {
+export const SessionManager: React.FC<SessionManagerProps> = ({ sessions, sessionTemplates = [], onChange }) => {
+  const [selectedTemplate, setSelectedTemplate] = useState('');
   const addSession = () => {
     onChange([...sessions, { ...EMPTY_SESSION }]);
+  };
+  const addFromTemplate = () => {
+    const tpl = sessionTemplates.find((t) => t.title === selectedTemplate);
+    if (!tpl) return;
+    onChange([
+      ...sessions,
+      {
+        ...EMPTY_SESSION,
+        title: tpl.title,
+        description: tpl.description ?? '',
+        sessionType: (tpl.sessionType as SessionFormData['sessionType']) ?? 'other',
+      },
+    ]);
   };
 
   const updateSession = (idx: number, s: SessionFormData) => {
@@ -419,13 +454,26 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ sessions, onChan
           </div>
           <p className="text-sm font-medium text-gray-700 mb-1">No sessions added yet</p>
           <p className="text-xs text-gray-500 mb-4">Sessions are the individual agenda items — keynotes, panels, workshops, etc.</p>
-          <button
-            type="button"
-            onClick={addSession}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm"
-          >
-            + Add First Session
-          </button>
+          <div className="flex gap-2 justify-center">
+            <button
+              type="button"
+              onClick={addSession}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm"
+            >
+              + Add First Session
+            </button>
+            {sessionTemplates.length > 0 && (
+              <>
+                <select className="border border-gray-300 rounded-lg px-2 py-2 text-sm" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
+                  <option value="">Choose default type</option>
+                  {sessionTemplates.map((tpl, idx) => <option key={`${tpl.title}-${idx}`} value={tpl.title}>{tpl.title}</option>)}
+                </select>
+                <button type="button" onClick={addFromTemplate} disabled={!selectedTemplate} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                  Add from default
+                </button>
+              </>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
@@ -445,6 +493,17 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ sessions, onChan
           >
             + Add Another Session
           </button>
+          {sessionTemplates.length > 0 && (
+            <div className="flex gap-2 items-center">
+              <select className="border border-gray-300 rounded-lg px-2 py-2 text-sm flex-1" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
+                <option value="">Choose default session type</option>
+                {sessionTemplates.map((tpl, idx) => <option key={`${tpl.title}-${idx}`} value={tpl.title}>{tpl.title}</option>)}
+              </select>
+              <button type="button" onClick={addFromTemplate} disabled={!selectedTemplate} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                Add Default Type
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
