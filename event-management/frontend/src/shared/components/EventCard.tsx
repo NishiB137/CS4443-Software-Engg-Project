@@ -6,29 +6,60 @@ export interface EventCardProps {
   date: string;
   location: string;
   price: number | 'Free';
-  imageUrl: string;
+  images: string[];
   category: string;
   organization: string;
   isTrending?: boolean;
 }
 
 export const EventCard: React.FC<EventCardProps> = ({ 
-  title, date, location, price, imageUrl, category, organization, isTrending
+  title, date, location, price, images, category, organization, isTrending
 }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [currentImg, setCurrentImg] = useState(0);
+
+  const nextImg = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrentImg((p) => (p + 1) % images.length);
+  };
+
+  const prevImg = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrentImg((p) => (p - 1 + images.length) % images.length);
+  };
+
+  const activeImg = images[currentImg] || 'https://placehold.co/800x600/f3f4f6/a1a1aa.png?text=No+Image';
 
   return (
     <div className="bg-surface rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col border border-border overflow-hidden group">
       
       {/* Image Container */}
-      <div className="relative overflow-hidden h-52">
-        {imageUrl.match(/\.(mp4|webm|ogg)$/i) ? (
-          <video src={imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+      <div className="relative overflow-hidden h-52 group/slider">
+        {activeImg.match(/\.(mp4|webm|ogg)$/i) ? (
+          <video src={activeImg} autoPlay loop muted playsInline className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
         ) : (
-          <img src={imageUrl} alt={title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <img src={activeImg} alt={title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
         )}
         
+        {images.length > 1 && (
+          <>
+            <button onClick={prevImg} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 text-white p-1.5 rounded-full opacity-0 group-hover/slider:opacity-100 transition-opacity z-20 hover:bg-black/60">
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <button onClick={nextImg} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 text-white p-1.5 rounded-full opacity-0 group-hover/slider:opacity-100 transition-opacity z-20 hover:bg-black/60">
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
+            </button>
+            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex gap-1 z-20">
+              {images.map((_, i) => (
+                <div key={i} className={`w-1.5 h-1.5 rounded-full ${i === currentImg ? 'bg-white' : 'bg-white/50'}`} />
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Permanent Top Gradient for Text/Icon Contrast */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-transparent h-24 pointer-events-none"></div>
 

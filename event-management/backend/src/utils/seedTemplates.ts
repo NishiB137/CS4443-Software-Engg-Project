@@ -40,7 +40,7 @@ const policyFields = (order = 40): IFieldSpec[] => [
 ];
 
 const onlineLinkField = (order = 25): IFieldSpec => ({
-  key: 'onlineLink', label: 'Online Event Link', fieldType: 'text', required: true,
+  key: 'onlineLink', label: 'Online Event Link', fieldType: 'text', required: false,
   defaultValue: 'Link will be shared soon', section: 'venue', order, helpText: 'Required for virtual and hybrid events',
 });
 

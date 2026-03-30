@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { EventFormData, StepErrors, StepDef } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import { validateStep } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
-import { eventApi } from '@/services/api';
+import { eventApi, templateApi } from '@/services/api';
+import { mergeSystemFields } from '@/shared/template/systemFields';
 
 const INITIAL_DATA: EventFormData = {
   template: '',
@@ -14,7 +15,7 @@ const INITIAL_DATA: EventFormData = {
   shortDescription: '',
   description: '',
   coverImage: '',
-  bannerImage: '',
+  secondaryImages: [],
   videoUrl: '',
   eventType: 'other',
   format: 'physical',
@@ -59,13 +60,115 @@ export const formatLocalDatetime = (date: string, time: string): string => {
   return d.toLocaleString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
-export const useEventWizard = () => {
+import { useEffect } from 'react';
+import type { ApiEvent } from '@/services/api';
+
+export const useEventWizard = ({ initialEventData, eventId }: { initialEventData?: ApiEvent | null; eventId?: string } = {}) => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep]   = useState(1);
   const [formData, setFormData]         = useState<EventFormData>(INITIAL_DATA);
   const [stepErrors, setStepErrors]     = useState<StepErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialEventData) {
+      setFormData((prev) => {
+        const parseIsoToLocal = (iso?: string) => {
+          if (!iso) return { date: '', time: '' };
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return { date: '', time: '' };
+          return {
+            date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+            time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+          };
+        };
+
+        const startParsed = parseIsoToLocal(initialEventData.startDate);
+        const endParsed = parseIsoToLocal(initialEventData.endDate);
+
+        return {
+          ...prev,
+          title: initialEventData.title || '',
+          shortDescription: initialEventData.shortDescription || '',
+          description: initialEventData.description || '',
+          coverImage: initialEventData.coverImage || '',
+          secondaryImages: (initialEventData as any).secondaryImages || [],
+          videoUrl: initialEventData.media?.videoUrl || '',
+          eventType: initialEventData.eventType || 'other',
+          format: initialEventData.format || 'physical',
+          isFree: initialEventData.isFree ?? true,
+          tags: initialEventData.tags?.map((t: any) => typeof t === 'string' ? t : t._id) || [],
+          notes: (initialEventData as any).notes || '',
+          startDate: startParsed.date,
+          startTime: startParsed.time,
+          endDate: endParsed.date,
+          endTime: endParsed.time,
+          timezone: initialEventData.timezone || 'Asia/Kolkata',
+          maxCapacity: initialEventData.maxCapacity != null ? String(initialEventData.maxCapacity) : '',
+          venue: {
+            name: initialEventData.venue?.name || '',
+            address: initialEventData.venue?.address || '',
+            city: initialEventData.venue?.city || '',
+            state: initialEventData.venue?.state || '',
+            country: initialEventData.venue?.country || '',
+            onlineLink: initialEventData.venue?.onlineLink || '',
+          },
+          visibility: initialEventData.visibility || 'public',
+          policies: {
+            refundPolicy: (initialEventData.policies as any)?.refundPolicy || 'no_refund',
+            cancellationPolicy: (initialEventData.policies as any)?.cancellationPolicy || '',
+            attendeeMinAge: String((initialEventData.policies as any)?.attendeeMinAge || '0'),
+          },
+          organizerName: initialEventData.organizerName || '',
+          pocDetails: {
+            name: (initialEventData as any).pocDetails?.name || '',
+            email: (initialEventData as any).pocDetails?.email || '',
+            phone: (initialEventData as any).pocDetails?.phone || '',
+          },
+          faqs: initialEventData.faqs || [],
+          template: (initialEventData as any).templateId || '',
+          customFieldValues: (initialEventData as any).customFields?.reduce((acc: any, field: any) => ({ ...acc, [field.key]: field.value }), {}) || {},
+          sessions: (initialEventData.sessions as any[])?.map((s: any) => {
+            const sStart = parseIsoToLocal(s.startTime);
+            const sEnd = parseIsoToLocal(s.endTime);
+            return {
+              id: s._id || Math.random().toString(),
+              title: s.title || '',
+              description: s.description || '',
+              notes: s.notes || '',
+              sessionType: s.sessionType || 'talk',
+              startDate: sStart.date,
+              startTime: sStart.time,
+              endDate: sEnd.date,
+              endTime: sEnd.time,
+              room: s.room || '',
+              streamUrl: s.streamUrl || '',
+              maxAttendees: s.maxAttendees != null ? String(s.maxAttendees) : '',
+              speakers: s.speakers || [],
+              tags: s.tags || [],
+              customFieldValues: s.customFields?.reduce((acc: any, field: any) => ({ ...acc, [field.key]: field.value }), {}) || {}
+            };
+          }) || [],
+        };
+      });
+      
+      const tId = (initialEventData as any).templateId;
+      if (tId) {
+        templateApi.getById(tId).then(res => {
+          const tpl = res.data;
+          setFormData(prev => ({
+            ...prev,
+            templateName: tpl.name,
+            templateFields: mergeSystemFields(tpl.fields || []),
+            sessionTemplates: tpl.sessionTemplates || [],
+          }));
+        }).catch(() => {
+          // ignore error, just won't render fields
+        });
+      }
+    }
+  }, [initialEventData]);
 
   const steps = useMemo<StepDef[]>(() => {
     const s: StepDef[] = [{ id: 'template', title: 'Template', type: 'template' }];
@@ -117,33 +220,38 @@ export const useEventWizard = () => {
   };
 
   const submitEvent = async (asDraft = false) => {
-    // ── Run ALL step validators before touching the API ──────────────────────
-    const allErrors = collectAllErrors(formData);
-    if (Object.keys(allErrors).length > 0) {
-      setStepErrors(allErrors);
-      // Navigate back to the first step that has errors so the user sees them
-      const stepWithError = steps.findIndex((step) => Object.keys(validateStep(step, formData)).length > 0);
-      if (stepWithError >= 0) setCurrentStep(stepWithError + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      setSubmitError('Please fix the highlighted errors before submitting.');
-      return;
+    updateFormData({ submitAs: asDraft ? 'draft' : 'published' });
+
+    // ── Run validator conditionally ──────────────────────
+    if (!asDraft) {
+      const allErrors = collectAllErrors(formData);
+      if (Object.keys(allErrors).length > 0) {
+        setStepErrors(allErrors);
+        const stepWithError = steps.findIndex((step) => Object.keys(validateStep(step, formData)).length > 0);
+        if (stepWithError >= 0) setCurrentStep(stepWithError + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setSubmitError('Please fix the highlighted errors before submitting.');
+        return;
+      }
     }
 
     // ── Convert date+time to ISO — abort if conversion fails ─────────────────
     const startISO = safeISO(formData.startDate, formData.startTime);
     const endISO   = safeISO(formData.endDate,   formData.endTime);
 
-    if (!startISO) {
-      setStepErrors({ startDate: 'Start date and time are invalid or incomplete.' });
-      setCurrentStep(2);
-      setSubmitError('Start date/time is invalid. Please re-enter it.');
-      return;
-    }
-    if (!endISO) {
-      setStepErrors({ endDate: 'End date and time are invalid or incomplete.' });
-      setCurrentStep(2);
-      setSubmitError('End date/time is invalid. Please re-enter it.');
-      return;
+    if (!asDraft) {
+      if (!startISO) {
+        setStepErrors({ startDate: 'Start date and time are invalid or incomplete.' });
+        setCurrentStep(2);
+        setSubmitError('Start date/time is invalid. Please re-enter it.');
+        return;
+      }
+      if (!endISO) {
+        setStepErrors({ endDate: 'End date and time are invalid or incomplete.' });
+        setCurrentStep(2);
+        setSubmitError('End date/time is invalid. Please re-enter it.');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -156,15 +264,15 @@ export const useEventWizard = () => {
         shortDescription: formData.shortDescription.trim() || undefined,
         description:      formData.description.trim(),
         coverImage:       formData.coverImage.trim() || undefined,
-        bannerImage:      formData.bannerImage.trim() || undefined,
+        secondaryImages:  formData.secondaryImages.length > 0 ? formData.secondaryImages : undefined,
         media:            { videoUrl: formData.videoUrl.trim() || undefined },
         eventType:        formData.eventType,
         format:           formData.format,
         isFree:           formData.isFree,
         tags:             formData.tags,
         notes:            formData.notes.trim() || undefined,
-        startDate:        startISO,
-        endDate:          endISO,
+        startDate:        startISO || new Date().toISOString(),
+        endDate:          endISO || new Date(Date.now() + 86400000).toISOString(),
         timezone:         formData.timezone,
         maxCapacity:      formData.maxCapacity ? Number(formData.maxCapacity) : undefined,
         templateId:       formData.template || undefined,
@@ -174,9 +282,9 @@ export const useEventWizard = () => {
           city:       formData.venue.city.trim()      || undefined,
           state:      formData.venue.state.trim()     || undefined,
           country:    formData.venue.country.trim()   || undefined,
-          onlineLink: formData.venue.onlineLink.trim() || undefined,
+          onlineLink: (formData.venue.onlineLink || '').trim() || undefined,
         } : {
-          onlineLink: formData.venue.onlineLink.trim() || undefined,
+          onlineLink: (formData.venue.onlineLink || '').trim() || undefined,
         },
         visibility: formData.visibility,
         status:     asDraft ? 'draft' as const : 'published' as const,
@@ -207,7 +315,7 @@ export const useEventWizard = () => {
         })(),
       };
 
-      const response = await eventApi.create({
+      const finalPayload = {
         ...payload,
         sessions: formData.sessions.map((session, idx) => {
           const sStart = safeISO(session.startDate, session.startTime);
@@ -217,8 +325,8 @@ export const useEventWizard = () => {
             description: session.description.trim() || undefined,
             notes: session.notes.trim() || undefined,
             sessionType: session.sessionType,
-            startTime: sStart || '',
-            endTime: sEnd || '',
+            startTime: sStart || undefined,
+            endTime: sEnd || undefined,
             room: session.room.trim() || undefined,
             streamUrl: session.streamUrl.trim() || undefined,
             maxAttendees: session.maxAttendees ? Number(session.maxAttendees) : undefined,
@@ -227,10 +335,17 @@ export const useEventWizard = () => {
             order: idx,
           };
         }),
-      } as any);
-      const eventId = response.data._id;
+      } as any;
 
-      navigate(`/event?id=${eventId}`, {
+      let responseId = eventId;
+      if (eventId) {
+        await eventApi.update(eventId, finalPayload);
+      } else {
+        const response = await eventApi.create(finalPayload);
+        responseId = response.data._id;
+      }
+
+      navigate(`/event?id=${responseId}`, {
         state: { justCreated: true, status: asDraft ? 'draft' : 'published' },
       });
 

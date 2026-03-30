@@ -113,6 +113,7 @@ export const getEventBySlug = async (req: Request, res: Response) => {
 // ─── PUT /api/events/:id ──────────────────────────────────────────────────────
 export const updateEvent = async (req: Request, res: Response) => {
   try {
+    console.log('[DEBUG-UPDATE] req.body:', JSON.stringify(req.body, null, 2));
     const changedBy = req.body.changedBy || DEV_USER_ID;
     const event = await eventService.updateEvent(param(req, 'id'), req.body, changedBy);
     if (!event) {
@@ -132,7 +133,7 @@ export const changeStatus = async (req: Request, res: Response) => {
     const { status } = req.body as { status: string };
     const changedBy = req.body.changedBy || DEV_USER_ID;
 
-    const validStatuses = ['draft', 'published', 'ongoing', 'completed', 'archived'];
+    const validStatuses = ['draft', 'review', 'approved', 'published', 'ongoing', 'completed', 'archived'];
     if (!validStatuses.includes(status)) {
       res.status(400).json({ success: false, message: `Invalid status. Valid values: ${validStatuses.join(', ')}` });
       return;

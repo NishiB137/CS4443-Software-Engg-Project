@@ -49,11 +49,12 @@ export interface ApiEvent {
     country?: string;
     onlineLink?: string;
   };
-  status: 'draft' | 'published' | 'ongoing' | 'completed' | 'archived';
+  status: 'draft' | 'review' | 'approved' | 'published' | 'ongoing' | 'completed' | 'archived';
   visibility: 'public' | 'restricted' | 'hidden_link' | 'hidden_authenticated';
   maxCapacity?: number;
   coverImage?: string;
   bannerImage?: string;
+  secondaryImages?: string[];
   media?: { videoUrl?: string; logo?: string };
   organizerName?: string;
   organization: { _id: string; name: string; slug: string; logo?: string } | string;
@@ -102,9 +103,10 @@ export interface CreateEventPayload {
     onlineLink?: string;
   };
   visibility: 'public' | 'restricted' | 'hidden_link' | 'hidden_authenticated';
-  status?: 'draft' | 'published';
+  status?: 'draft' | 'review' | 'approved' | 'published' | 'ongoing' | 'completed' | 'archived';
   coverImage?: string;
   bannerImage?: string;
+  secondaryImages?: string[];
   media?: { videoUrl?: string; logo?: string };
   organizerName?: string;
   policies?: Record<string, unknown>;
@@ -212,7 +214,7 @@ export const eventApi = {
 // ─── Template types ───────────────────────────────────────────────────────────
 
 export type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'time' | 'datetime'
-  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone' | 'speakers' | 'file_image' | 'file_video';
+  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone' | 'speakers' | 'file_image' | 'file_video' | 'file_image_multiple';
 
 export type FieldSection = 'basics' | 'datetime' | 'venue' | 'capacity' | 'policies' | 'media' | 'custom';
 

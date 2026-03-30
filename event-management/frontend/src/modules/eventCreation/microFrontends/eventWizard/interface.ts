@@ -109,7 +109,7 @@ export interface EventFormData {
   shortDescription: string;
   description: string;
   coverImage: string;
-  bannerImage: string;
+  secondaryImages: string[];
   videoUrl: string;
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
@@ -141,7 +141,7 @@ export interface EventFormData {
   pocDetails: { name: string; email: string; phone: string };
   faqs: Array<{ question: string; answer: string }>;
   sessions: SessionFormData[];
-  submitAs: 'draft' | 'published';
+  submitAs: 'draft' | 'review' | 'approved' | 'published' | 'ongoing' | 'completed' | 'archived';
 }
 
 export type StepErrors = Partial<Record<string, string>>;
@@ -203,7 +203,7 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
     const fieldKeys = new Set(fieldsInForm.map(f => f.key));
 
     for (const f of fieldsInForm) {
-      const val = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink', 'shareOnlineLinkLater', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge', 'coverImage', 'bannerImage', 'videoUrl'].includes(f.key)
+      const val = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink', 'shareOnlineLinkLater', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge', 'coverImage', 'secondaryImages', 'videoUrl'].includes(f.key)
         ? (() => {
             if (f.key.startsWith('venue_')) return data.venue[f.key.replace('venue_', '') as keyof typeof data.venue];
             if (f.key === 'refundPolicy' || f.key === 'cancellationPolicy' || f.key === 'attendeeMinAge') return data.policies[f.key as keyof typeof data.policies];

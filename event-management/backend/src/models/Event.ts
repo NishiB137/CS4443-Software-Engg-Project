@@ -25,6 +25,7 @@ export interface IEvent extends Document {
   description?: string;
   coverImage?: string;
   bannerImage?: string;
+  secondaryImages?: string[];
   media: { videoUrl?: string; logo?: string };
 
   organization: mongoose.Types.ObjectId;
@@ -51,7 +52,7 @@ export interface IEvent extends Document {
   registrationOpenDate?: Date;
   registrationCloseDate?: Date;
 
-  status: 'draft' | 'published' | 'ongoing' | 'completed' | 'archived';
+  status: 'draft' | 'review' | 'approved' | 'published' | 'ongoing' | 'completed' | 'archived';
   visibility: 'public' | 'restricted' | 'hidden_link' | 'hidden_authenticated';
 
   team: Array<{ user: mongoose.Types.ObjectId; role: string; assignedAt: Date }>;
@@ -90,6 +91,7 @@ const EventSchema = new Schema<IEvent>({
   description:      { type: String },
   coverImage:       { type: String },
   bannerImage:      { type: String },
+  secondaryImages:  [{ type: String }],
   media: { videoUrl: { type: String }, logo: { type: String } },
   organization: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
   createdBy:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -106,7 +108,7 @@ const EventSchema = new Schema<IEvent>({
   timezone:              { type: String, default: 'Asia/Kolkata' },
   registrationOpenDate:  { type: Date },
   registrationCloseDate: { type: Date },
-  status:     { type: String, enum: ['draft', 'published', 'ongoing', 'completed', 'archived'], default: 'draft' },
+  status:     { type: String, enum: ['draft', 'review', 'approved', 'published', 'ongoing', 'completed', 'archived'], default: 'draft' },
   visibility: { type: String, enum: ['public', 'restricted', 'hidden_link', 'hidden_authenticated'], default: 'public' },
   team: [{ user: { type: Schema.Types.ObjectId, ref: 'User' }, role: { type: String, default: 'event_manager' }, assignedAt: { type: Date, default: Date.now } }],
   policies: { type: EventPolicySchema, default: () => ({}) },

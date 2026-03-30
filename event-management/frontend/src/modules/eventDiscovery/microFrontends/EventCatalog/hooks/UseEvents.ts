@@ -44,7 +44,7 @@ export interface CatalogEvent {
   date: string;
   location: string;
   price: number | 'Free';
-  imageUrl: string;
+  images: string[];
   category: string;
   organization: string;
   isTrending: boolean;
@@ -72,7 +72,12 @@ const mapEvent = (e: ApiEvent): CatalogEvent => ({
   date:         formatEventDate(e.startDate),
   location:     getVenueDisplay(e),
   price:        getPriceDisplay(e),
-  imageUrl:     e.coverImage ?? e.bannerImage ?? getFallback(e.eventType),
+  images:       [
+    e.coverImage,
+    ...((e as any).secondaryImages || [])
+  ].filter(Boolean).length > 0 
+    ? [e.coverImage, ...((e as any).secondaryImages || [])].filter(Boolean) as string[]
+    : [getFallback(e.eventType)],
   category:     getCategoryLabel(e),
   organization: getOrganizerName(e),
   isTrending:   (e.analytics?.views ?? 0) > 500 || (e.analytics?.registrations ?? 0) > 100,

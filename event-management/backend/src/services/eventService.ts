@@ -53,12 +53,13 @@ const validateCreateBody = (body: CreateEventBody): void => {
   const errors: string[] = [];
 
   const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const isDraft = body.status === 'draft';
 
   // ── Title ──
   const title = asString(body.title);
   if (!title.trim())
     errors.push('Event name is required.');
-  else if (title.trim().length < LIMITS.title.min)
+  else if (title.trim().length < LIMITS.title.min && !isDraft)
     errors.push(`Event name must be at least ${LIMITS.title.min} characters.`);
   else if (title.trim().length > LIMITS.title.max)
     errors.push(`Event name cannot exceed ${LIMITS.title.max} characters.`);
@@ -68,24 +69,30 @@ const validateCreateBody = (body: CreateEventBody): void => {
   if (shortDescription && shortDescription.length > LIMITS.shortDescription.max)
     errors.push(`Short description cannot exceed ${LIMITS.shortDescription.max} characters.`);
 
-  // ── Full description — ALWAYS required, not optional ──
+  // ── Full description ──
   const description = asString(body.description);
-  if (!description.trim())
-    errors.push('Event description is required.');
-  else if (description.trim().length < LIMITS.description.min)
-    errors.push(`Description must be at least ${LIMITS.description.min} characters.`);
-  else if (description.length > LIMITS.description.max)
+  if (!isDraft) {
+    if (!description.trim())
+      errors.push('Event description is required.');
+    else if (description.trim().length < LIMITS.description.min)
+      errors.push(`Description must be at least ${LIMITS.description.min} characters.`);
+    else if (description.length > LIMITS.description.max)
+      errors.push(`Description cannot exceed ${LIMITS.description.max.toLocaleString()} characters.`);
+  } else if (description.trim() && description.length > LIMITS.description.max) {
     errors.push(`Description cannot exceed ${LIMITS.description.max.toLocaleString()} characters.`);
+  }
 
   // ── Dates — must be present, parseable, non-epoch, and ordered ──
   const start = parseDate(body.startDate);
   const end   = parseDate(body.endDate);
 
-  if (!asString(body.startDate).trim()) errors.push('Start date is required.');
-  else if (!start)             errors.push('Start date is not a valid date.');
+  if (!isDraft) {
+    if (!asString(body.startDate).trim()) errors.push('Start date is required.');
+    else if (!start)             errors.push('Start date is not a valid date.');
 
-  if (!asString(body.endDate).trim())   errors.push('End date is required.');
-  else if (!end)               errors.push('End date is not a valid date.');
+    if (!asString(body.endDate).trim())   errors.push('End date is required.');
+    else if (!end)               errors.push('End date is not a valid date.');
+  }
 
   if (start && end && end <= start)
     errors.push('End date/time must be after start date/time.');
@@ -152,6 +159,7 @@ export const createEvent = async (body: CreateEventBody) => {
   // Throws before any DB write if validation fails
   validateCreateBody(body);
 
+  const isDraft = body.status === 'draft';
   const slug = generateSlug(body.title);
   const session = await mongoose.startSession();
   try {
@@ -185,7 +193,7 @@ export const createEvent = async (body: CreateEventBody) => {
         tags: s.tags,
         order: s.order ?? idx,
         createdBy: body.createdBy,
-      } as any);
+      } as any, isDraft);
       return { ...s, order: s.order ?? idx };
     });
 
@@ -291,7 +299,7 @@ export const listEvents = async (filters: {
 
   const query: Record<string, unknown> = {};
   if (status)       query['status']       = status;
-  if (visibility)   query['visibility']   = visibility;
+  if (visibility && visibility !== 'all') query['visibility'] = visibility;
   if (isFree !== undefined) query['isFree'] = isFree;
   if (organization) query['organization'] = organization;
   if (createdBy)    query['createdBy']    = createdBy;
@@ -374,16 +382,20 @@ export const updateEvent = async (id: string, body: UpdateEventBody, changedBy: 
 
   const errors: string[] = [];
 
+  const isDraft = (body.status || event.status) === 'draft';
+
   if (body.title !== undefined) {
     if (!body.title.trim()) errors.push('Event name cannot be empty.');
-    else if (body.title.trim().length < LIMITS.title.min) errors.push(`Event name must be at least ${LIMITS.title.min} characters.`);
+    else if (body.title.trim().length < LIMITS.title.min && !isDraft) errors.push(`Event name must be at least ${LIMITS.title.min} characters.`);
     else if (body.title.trim().length > LIMITS.title.max) errors.push(`Event name cannot exceed ${LIMITS.title.max} characters.`);
   }
 
   if (body.description !== undefined && body.description !== null) {
-    if (!body.description.trim()) errors.push('Description cannot be empty.');
-    else if (body.description.trim().length < LIMITS.description.min) errors.push(`Description must be at least ${LIMITS.description.min} characters.`);
-    else if (body.description.length > LIMITS.description.max) errors.push(`Description cannot exceed ${LIMITS.description.max.toLocaleString()} characters.`);
+    if (!isDraft) {
+      if (!body.description.trim()) errors.push('Description cannot be empty.');
+      else if (body.description.trim().length < LIMITS.description.min) errors.push(`Description must be at least ${LIMITS.description.min} characters.`);
+    }
+    if (body.description.length > LIMITS.description.max) errors.push(`Description cannot exceed ${LIMITS.description.max.toLocaleString()} characters.`);
   }
 
   if (body.maxCapacity !== undefined && body.maxCapacity !== null) {
@@ -411,9 +423,55 @@ export const updateEvent = async (id: string, body: UpdateEventBody, changedBy: 
     }
   }
 
+  const { sessions: _ignoreSessions, ...updateBody } = body;
+
+  if (body.sessions) {
+    const validatedSessions = body.sessions.map((s, idx) => {
+      validateSessionBody({
+        event: id,
+        title: s.title,
+        description: s.description ?? '',
+        notes: s.notes,
+        sessionType: s.sessionType,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        timezone: s.timezone,
+        room: s.room,
+        streamUrl: s.streamUrl,
+        maxAttendees: s.maxAttendees,
+        speakers: s.speakers,
+        tags: s.tags,
+        order: s.order ?? idx,
+        createdBy: changedBy,
+      } as any, isDraft);
+      return { ...s, order: s.order ?? idx };
+    });
+
+    await Session.deleteMany({ event: id });
+    if (validatedSessions.length > 0) {
+      await Session.insertMany(validatedSessions.map((s) => ({
+        event: id,
+        createdBy: changedBy,
+        title: s.title,
+        description: s.description,
+        notes: s.notes,
+        sessionType: s.sessionType ?? 'other',
+        startTime: s.startTime,
+        endTime: s.endTime,
+        timezone: s.timezone ?? body.timezone ?? 'Asia/Kolkata',
+        room: s.room,
+        streamUrl: s.streamUrl,
+        maxAttendees: s.maxAttendees,
+        speakers: s.speakers,
+        tags: s.tags ?? [],
+        order: s.order ?? 0,
+      })));
+    }
+  }
+
   return Event.findByIdAndUpdate(
     id,
-    { ...body, $push: { changeLog: { $each: logEntries } } },
+    { ...updateBody, $push: { changeLog: { $each: logEntries } } },
     { new: true, runValidators: true }
   )
     .populate('tags',         'name slug')

@@ -135,7 +135,7 @@ export const EventDetailsMFE: React.FC = () => {
             />
           )
         ))}
-        <div className="absolute inset-0 bg-gradient-to-t from-secondary via-secondary/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10" />
 
         {/* Slideshow navigation */}
         {event.images.length > 1 && (
@@ -224,7 +224,18 @@ export const EventDetailsMFE: React.FC = () => {
               )}
             </div>
 
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-3 drop-shadow-md">{event.title}</h1>
+            <h1
+              className="text-4xl md:text-5xl font-extrabold mb-3 inline-block"
+              style={{
+                textShadow: '0 2px 16px rgba(0,0,0,0.95), 0 1px 3px rgba(0,0,0,1)',
+                color: '#fff',
+                WebkitTextStroke: '0.3px rgba(0,0,0,0.5)',
+                background: 'rgba(0,0,0,0.45)',
+                borderRadius: '12px',
+                padding: '4px 16px 6px',
+                backdropFilter: 'blur(4px)',
+              }}
+            >{event.title}</h1>
 
             {event.shortDescription && (
               <p className="text-lg opacity-90 mb-3 max-w-2xl">{event.shortDescription}</p>
@@ -276,7 +287,7 @@ export const EventDetailsMFE: React.FC = () => {
             <p className="text-text-secondary leading-relaxed whitespace-pre-line">{event.description}</p>
 
             {/* Tabs */}
-            <div className="flex border-b border-border mt-6 mb-4 overflow-x-auto hide-scrollbar">
+            <div className="flex border-b border-border mt-6 mb-4 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
               {(['details', 'agenda', 'venue', 'policies'] as const).map(tab => (
                 <button
                   key={tab}
@@ -373,8 +384,8 @@ export const EventDetailsMFE: React.FC = () => {
                                 <p className="text-sm font-semibold text-text-primary truncate">{session.title}</p>
                                 {session.startTime && (
                                   <p className="text-xs text-text-secondary mt-0.5 font-medium">
-                                    {formatSessionTime(session.startTime)}
-                                    {session.endTime && ` → ${formatSessionTime(session.endTime)}`}
+                                    {session.startTime ? formatSessionTime(session.startTime) : 'TBD'}
+                                    {session.endTime ? ` → ${formatSessionTime(session.endTime)}` : ' → TBD'}
                                   </p>
                                 )}
                               </div>
@@ -484,36 +495,79 @@ export const EventDetailsMFE: React.FC = () => {
             {activeTab === 'venue' && (
               <div className="py-4">
                 {event.format === 'virtual' ? (
-                  <div className="text-sm text-text-secondary space-y-2">
-                    <p className="text-text-primary font-medium">This is an online event.</p>
-                    {event.onlineLink && (
-                      <a href={event.onlineLink} target="_blank" rel="noreferrer"
-                        className="inline-block text-primary underline break-all">
-                        {event.onlineLink}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 text-sm space-y-3">
+                    <div className="flex items-center gap-2 text-blue-700 font-semibold">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.07A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Online Event
+                    </div>
+                    <p className="text-text-secondary">This event takes place fully online. Use the button below to join.</p>
+                    {event.onlineLink ? (
+                      <a
+                        href={event.onlineLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        Join the Event Online
                       </a>
+                    ) : (
+                      <p className="text-text-secondary italic text-xs">Link will be shared closer to the event.</p>
                     )}
                   </div>
                 ) : (
-                  <div className="bg-background rounded-xl p-4 border border-border text-sm text-text-secondary">
-                    <p className="text-text-primary font-semibold mb-1">📍 Venue</p>
-                    <p>{event.locationInfo}</p>
-                    <div className="mt-2 flex gap-3">
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationInfo)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary underline text-xs"
-                      >
-                        Open in Google Maps
-                      </a>
-                      <button
-                        type="button"
-                        className="text-xs text-gray-600 underline"
-                        onClick={() => navigator.clipboard?.writeText(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationInfo)}`)}
-                      >
-                        Copy map link
-                      </button>
+                  <div className="space-y-3">
+                    <div className="bg-background rounded-xl p-4 border border-border text-sm text-text-secondary">
+                      <p className="text-text-primary font-semibold mb-1">📍 Venue</p>
+                      <p>{event.locationInfo}</p>
+                      <div className="mt-2 flex gap-3">
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationInfo)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline text-xs"
+                        >
+                          Open in Google Maps
+                        </a>
+                        <button
+                          type="button"
+                          className="text-xs text-gray-600 underline"
+                          onClick={() => navigator.clipboard?.writeText(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationInfo)}`)}
+                        >
+                          Copy map link
+                        </button>
+                      </div>
                     </div>
+                    {/* For hybrid: also show online join */}
+                    {event.format === 'hybrid' && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm space-y-2">
+                        <p className="text-blue-700 font-semibold flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.07A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          Also available online
+                        </p>
+                        {event.onlineLink ? (
+                          <a
+                            href={event.onlineLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition text-sm"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            Join Online
+                          </a>
+                        ) : (
+                          <p className="text-text-secondary italic text-xs">Online link will be shared closer to the event.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -685,7 +739,42 @@ export const EventDetailsMFE: React.FC = () => {
 
         {/* Right sidebar */}
         <div className="space-y-6">
-          {/* Details card */}
+
+          {/* ── Register / Join CTA card (top of sidebar) ── */}
+          <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border">
+            <h3 className="font-bold text-lg text-text-primary mb-4">
+              {event.isFree ? '🎟️ Free Event' : '🎫 Get Tickets'}
+            </h3>
+
+            {/* Online join button for virtual/hybrid */}
+            {event.onlineLink && event.format !== 'physical' && (
+              <a
+                href={event.onlineLink}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center gap-2 w-full mb-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition shadow-sm text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.07A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Join Online
+              </a>
+            )}
+
+            {/* Register button */}
+            <button
+              onClick={() => {
+                document.getElementById('tickets')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3.5 rounded-xl transition shadow-md text-base"
+            >
+              {event.isFree ? 'Register for Free' : 'Register / Get Tickets'}
+            </button>
+
+            {event.isFree && (
+              <p className="text-center text-xs text-text-secondary mt-3">No payment required</p>
+            )}
+          </div>
           <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border">
             <h3 className="font-bold text-lg text-text-primary mb-4 border-b border-border pb-2">Details</h3>
             <div className="space-y-4 text-sm text-text-secondary">
@@ -698,11 +787,10 @@ export const EventDetailsMFE: React.FC = () => {
               <div>
                 <strong className="block text-text-primary mb-1">Location</strong>
                 <p>{event.locationInfo}</p>
-                {event.onlineLink && event.format !== 'physical' && (
-                  <a href={event.onlineLink} target="_blank" rel="noreferrer"
-                    className="text-xs text-primary underline block mt-1 break-all">
-                    Join Online
-                  </a>
+                {event.format !== 'physical' && (
+                  <p className="text-xs text-text-secondary mt-1 italic">
+                    {event.onlineLink ? 'Online access available — see Join Online button above.' : 'Online link will be shared closer to the event.'}
+                  </p>
                 )}
               </div>
               {event.maxCapacity && (

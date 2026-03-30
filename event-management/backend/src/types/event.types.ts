@@ -28,6 +28,7 @@ export interface CreateEventBody {
   tags?: string[];
   coverImage?: string;
   bannerImage?: string;
+  secondaryImages?: string[];
   organizerName?: string;
   pocDetails?: { name: string; email: string; phone?: string };
   policies?: {

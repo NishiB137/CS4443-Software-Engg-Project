@@ -8,7 +8,9 @@ import { Step4Sessions } from '@/modules/eventCreation/microFrontends/eventWizar
 import { Step5Faq } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step5Faq';
 import { Step4Review } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Review';
 
-export const EventWizardMFE: React.FC = () => {
+import type { ApiEvent } from '@/services/api';
+
+export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; eventId?: string }> = ({ initialEventData, eventId }) => {
   const {
     currentStep,
     totalSteps,
@@ -21,7 +23,7 @@ export const EventWizardMFE: React.FC = () => {
     isSubmitting,
     submitError,
     stepErrors,
-  } = useEventWizard();
+  } = useEventWizard({ initialEventData, eventId });
 
   const renderStepContent = () => {
     const props = {
@@ -104,15 +106,16 @@ export const EventWizardMFE: React.FC = () => {
         </button>
 
         <div className="flex items-center gap-3">
-          {currentStep === totalSteps && (
-            <button
-              onClick={() => submitEvent(true)}
-              disabled={isSubmitting}
-              className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition disabled:opacity-50 text-sm"
-            >
-              {isSubmitting ? 'Saving...' : 'Save as Draft'}
-            </button>
-          )}
+          <button
+            onClick={() => submitEvent(true)}
+            disabled={isSubmitting}
+            className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition disabled:opacity-50 text-sm flex items-center gap-2"
+          >
+            {isSubmitting && formData.submitAs === 'draft' && (
+              <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span>
+            )}
+            {isSubmitting && formData.submitAs === 'draft' ? 'Saving...' : 'Save as Draft'}
+          </button>
 
           {currentStep < totalSteps ? (
             <button
@@ -130,7 +133,7 @@ export const EventWizardMFE: React.FC = () => {
               disabled={isSubmitting}
               className="px-8 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold transition shadow-md disabled:opacity-60 text-sm flex items-center gap-2"
             >
-              {isSubmitting ? (
+              {isSubmitting && formData.submitAs !== 'draft' ? (
                 <>
                   <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

@@ -94,8 +94,13 @@ const mapApiEventToDetail = (e: ApiEvent): Omit<EventDetail, 'sessions'> => {
   // Build images array
   const images: string[] = [];
   if (e.media?.videoUrl) images.push(e.media.videoUrl);
-  if (e.coverImage)  images.push(e.coverImage);
-  if (e.bannerImage && e.bannerImage !== e.coverImage) images.push(e.bannerImage);
+  if (e.coverImage) images.push(e.coverImage);
+  if (Array.isArray(e.secondaryImages) && e.secondaryImages.length > 0) {
+    images.push(...e.secondaryImages);
+  }
+  if (images.length === 0) {
+    images.push('https://placehold.co/1200x600/f3f4f6/a1a1aa.png?text=No+Image+Available');
+  }
 
   // Tags
   const rawTags = (e as unknown as { tags?: Array<{ name?: string } | string> }).tags ?? [];
@@ -147,7 +152,10 @@ const mapApiEventToDetail = (e: ApiEvent): Omit<EventDetail, 'sessions'> => {
   // Location
   const v = e.venue;
   let locationInfo = getVenueDisplay(e);
-  if (v?.address) locationInfo = [v.address, v.city, v.state, v.country].filter(Boolean).join(', ');
+  if (v && Object.keys(v).some(k => k !== 'onlineLink' && (v as any)[k])) {
+    const parts = [v.name, v.address, v.city, v.state, v.country].filter(Boolean);
+    if (parts.length > 0) locationInfo = parts.join(', ');
+  }
 
   const analytics        = (e as unknown as { analytics?: Analytics }).analytics;
   const registrationCount = (e as unknown as { registrationCount?: number }).registrationCount;
@@ -160,7 +168,11 @@ const mapApiEventToDetail = (e: ApiEvent): Omit<EventDetail, 'sessions'> => {
     dateInfo:         formatEventDate(e.startDate),
     endDateInfo:      formatEventDate(e.endDate),
     locationInfo,
-    onlineLink:       v?.onlineLink ?? '',
+    onlineLink:       (() => {
+      const raw = v?.onlineLink ?? '';
+      // Strip the old placeholder default that was incorrectly saved to DB
+      return raw.startsWith('http://') || raw.startsWith('https://') ? raw : '';
+    })(),
     format:           e.format,
     registeredCount:  (analytics?.registrations ?? registrationCount ?? 0).toLocaleString(),
     views:            (analytics?.views ?? 0).toLocaleString(),

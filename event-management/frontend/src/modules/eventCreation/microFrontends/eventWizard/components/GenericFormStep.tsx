@@ -44,6 +44,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
     if (key.startsWith('venue_')) return data.venue[key.replace('venue_', '') as keyof typeof data.venue] ?? '';
     if (key === 'refundPolicy' || key === 'cancellationPolicy' || key === 'attendeeMinAge') return data.policies[key as keyof typeof data.policies] as string;
     if (key === 'shareOnlineLinkLater') return data.venue.shareOnlineLinkLater ?? '';
+    if (key === 'onlineLink') return data.venue.onlineLink ?? '';
     return (data as any)[key] as string;
   };
 
@@ -52,8 +53,8 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
       updateData({ venue: { ...data.venue, [key.replace('venue_', '')]: value } });
       return;
     }
-    if (key === 'shareOnlineLinkLater') {
-      updateData({ venue: { ...data.venue, shareOnlineLinkLater: value } });
+    if (key === 'onlineLink' || key === 'shareOnlineLinkLater') {
+      updateData({ venue: { ...data.venue, [key]: value } });
       return;
     }
     if (key === 'refundPolicy' || key === 'cancellationPolicy' || key === 'attendeeMinAge') {
@@ -71,8 +72,20 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
     'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity',
     'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country',
     'onlineLink', 'shareOnlineLinkLater', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge',
-    'coverImage', 'bannerImage', 'videoUrl'
+    'coverImage', 'bannerImage', 'videoUrl', 'secondaryImages'
   ]);
+
+  // For array fields (like secondaryImages) we bypass the string-typed setVal path
+  const setArraySystemValue = (key: string, value: string[]) => {
+    updateData({ [key]: value } as Partial<typeof data>);
+  };
+
+  const getArraySystemValue = (key: string): string[] => {
+    if (key === 'secondaryImages') return Array.isArray(data.secondaryImages) ? data.secondaryImages : [];
+    return [];
+  };
+
+  const arrayFieldKeys = new Set(['secondaryImages']);
 
   const categories = data.templateLayout?.forms?.find(f => f.name === formName)?.categories || [];
   const categoriesMap = fields.reduce<Record<string, typeof fields>>((acc, f) => {
@@ -113,8 +126,12 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
             <div className="space-y-5">
               {catFields.map((f, fIdx) => {
                 const isSystem = systemFieldKeys.has(f.key);
-                const val = isSystem ? getSystemValue(f.key) : getCustomValue(f.key);
+                const isArrayField = arrayFieldKeys.has(f.key);
+                const val = isArrayField
+                  ? getArraySystemValue(f.key)
+                  : isSystem ? getSystemValue(f.key) : getCustomValue(f.key);
                 const setVal = (v: string) => isSystem ? setSystemValue(f.key, v) : setCustomValue(f.key, v);
+                const setArrVal = (v: string[]) => setArraySystemValue(f.key, v);
                 const hasError = !!errors[f.key];
                 const fieldNumberStr = catIndex > 0 ? `${formNumber}.${catIndex}.${fIdx + 1}. ` : '';
 
@@ -180,9 +197,64 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                         </div>
                         <FieldError msg={errors[f.key]} />
                       </div>
+                    ) : f.fieldType === 'file_image_multiple' ? (
+                      <div>
+                        {Array.isArray(val) && val.length > 0 && (
+                          <div className="mb-3 flex flex-wrap gap-3">
+                            {(val as string[]).map((url: string, idx: number) => (
+                              <div key={idx} className="relative group w-32 h-24">
+                                <img src={url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover rounded-lg border border-gray-200 shadow-sm" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newVal = [...(val as string[])];
+                                    newVal.splice(idx, 1);
+                                    setArrVal(newVal);
+                                  }}
+                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow hover:bg-red-600 opacity-0 group-hover:opacity-100 transition"
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {(!Array.isArray(val) || (val as string[]).length < 5) && (
+                          <label className="block w-full cursor-pointer bg-white border border-gray-300 hover:bg-gray-50 border-dashed rounded-lg px-4 py-3 text-center transition">
+                            <span className="text-sm font-medium text-blue-600">
+                              {uploadingField === f.key ? 'Uploading to S3...' : 'Upload Additional Image (Max 5)'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              disabled={!!uploadingField}
+                              onChange={async (e) => {
+                                const files = Array.from(e.target.files || []);
+                                if (!files.length) return;
+                                try {
+                                  setUploadingField(f.key);
+                                  const currentArr = Array.isArray(val) ? (val as string[]) : [];
+                                  const remainingSlots = 5 - currentArr.length;
+                                  const toUpload = files.slice(0, remainingSlots);
+                                  const newUrls = await Promise.all(toUpload.map(file => uploadApi.uploadFile(file)));
+                                  setArrVal([...currentArr, ...newUrls]);
+                                } catch (err: unknown) {
+                                  alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)));
+                                } finally {
+                                  setUploadingField(null);
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                        <FieldError msg={errors[f.key]} />
+                      </div>
                     ) : f.fieldType === 'file_image' || f.fieldType === 'file_video' ? (
                       <div>
-                        {val && (
+                        {typeof val === 'string' && val && (
                           <div className="mb-3">
                             {f.fieldType === 'file_image' ? (
                               <img src={val} alt="Preview" className="w-32 h-24 object-cover rounded-lg border border-gray-200 shadow-sm" />
@@ -208,7 +280,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                               try {
                                 setUploadingField(f.key);
                                 const url = await uploadApi.uploadFile(file);
-                                setVal(url);
+                                setVal(url as any);
                               } catch (err: any) {
                                 alert('Upload failed: ' + err.message);
                               } finally {

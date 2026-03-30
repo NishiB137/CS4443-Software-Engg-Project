@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 export const Header: React.FC = () => {
   // Mock states for UI testing
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [mode, setMode] = useState<'Organizer' | 'Attendee'>('Attendee');
 
   return (
     <header className="bg-surface border-b border-border py-3 px-6 sticky top-0 z-50 shadow-sm">
@@ -45,14 +44,14 @@ export const Header: React.FC = () => {
               {/* Mode Switch Toggle */}
               <div className="hidden md:flex bg-background border border-border rounded-full p-1 shadow-inner">
                 <button 
-                  onClick={() => setMode('Organizer')} 
-                  className={`px-4 py-1.5 text-sm rounded-full font-semibold transition-all duration-200 ${mode === 'Organizer' ? 'bg-surface shadow-sm text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                  onClick={() => { window.location.href = '/organizer'; }} 
+                  className={`px-4 py-1.5 text-sm rounded-full font-semibold transition-all duration-200 ${window.location.pathname.startsWith('/organizer') ? 'bg-surface shadow-sm text-primary' : 'text-text-secondary hover:text-text-primary'}`}
                 >
                   Organizer Mode
                 </button>
                 <button 
-                  onClick={() => setMode('Attendee')} 
-                  className={`px-4 py-1.5 text-sm rounded-full font-semibold transition-all duration-200 ${mode === 'Attendee' ? 'bg-surface shadow-sm text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                  onClick={() => { window.location.href = '/'; }} 
+                  className={`px-4 py-1.5 text-sm rounded-full font-semibold transition-all duration-200 ${!window.location.pathname.startsWith('/organizer') ? 'bg-surface shadow-sm text-primary' : 'text-text-secondary hover:text-text-primary'}`}
                 >
                   Attendee Mode
                 </button>

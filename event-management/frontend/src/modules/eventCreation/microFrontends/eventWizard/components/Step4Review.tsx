@@ -116,7 +116,9 @@ export const Step4Review: React.FC<WizardStepProps & { errors?: Record<string, s
               <div key={i} className="flex justify-between items-center text-sm p-3 bg-gray-50 rounded-lg border border-gray-100">
                 <div>
                   <p className="font-semibold text-gray-800">{s.title || 'Untitled Session'}</p>
-                  <p className="text-xs text-gray-500">{s.startDate} {s.startTime} - {s.endDate} {s.endTime}</p>
+                  <p className="text-xs text-gray-500">
+                    {s.startDate || 'TBD'} {s.startTime || 'TBD'} - {s.endDate || 'TBD'} {s.endTime || 'TBD'}
+                  </p>
                 </div>
                 <span className="capitalize text-xs text-gray-600 bg-white border border-gray-200 px-2 py-1 rounded-md">{s.sessionType}</span>
               </div>

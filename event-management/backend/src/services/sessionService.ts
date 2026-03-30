@@ -33,11 +33,12 @@ const SESSION_LIMITS = {
   speakerBio:  { max: 500 },
 };
 
-export const validateSessionBody = (body: CreateSessionBody): void => {
+export const validateSessionBody = (body: CreateSessionBody, isDraft = false): void => {
   const errors: string[] = [];
 
-  if (!body.title?.trim())
-    errors.push('Session title is required.');
+  if (!body.title?.trim()) {
+    if (!isDraft) errors.push('Session title is required.');
+  }
   else if (body.title.trim().length < SESSION_LIMITS.title.min)
     errors.push(`Session title must be at least ${SESSION_LIMITS.title.min} characters.`);
   else if (body.title.trim().length > SESSION_LIMITS.title.max)
@@ -46,8 +47,10 @@ export const validateSessionBody = (body: CreateSessionBody): void => {
   if (body.description && body.description.length > SESSION_LIMITS.description.max)
     errors.push(`Session description cannot exceed ${SESSION_LIMITS.description.max} characters.`);
 
-  if (!body.startTime) errors.push('Session start time is required.');
-  if (!body.endTime)   errors.push('Session end time is required.');
+  if (!isDraft) {
+    if (!body.startTime) errors.push('Session start time is required.');
+    if (!body.endTime)   errors.push('Session end time is required.');
+  }
 
   if (body.startTime && body.endTime) {
     const s = new Date(body.startTime), e = new Date(body.endTime);
@@ -78,7 +81,7 @@ export const validateSessionBody = (body: CreateSessionBody): void => {
 };
 
 export const createSession = async (body: CreateSessionBody) => {
-  validateSessionBody(body);
+  validateSessionBody(body, false);
   return Session.create(body);
 };
 
