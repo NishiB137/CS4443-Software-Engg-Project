@@ -62,9 +62,9 @@ interface FieldRowProps {
 }
 
 const FieldRow: React.FC<FieldRowProps> = ({
-  field, index, onUpdate, onRemove, isSystemField, isNew, readOnly, isSessionTemplate, dragHandleProps,
+  field, index, onUpdate, onRemove, isSystemField, isNew, readOnly, dragHandleProps,
 }) => {
-  const lockKey = readOnly || isSystemField;
+  const lockKey = readOnly;
   const [expanded, setExpanded] = useState(false);
   const [optionInput, setOptionInput] = useState('');
   const needsOptions = field.fieldType === 'select' || field.fieldType === 'multiselect';
@@ -130,7 +130,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
         <button
           type="button"
           onClick={() => upd({ required: !field.required })}
-          disabled={readOnly}
+          disabled={readOnly || field.key === 'description'}
           className={`text-xs px-2 py-0.5 rounded-full font-medium border transition flex-shrink-0 ${
             field.required
               ? 'bg-red-50 border-red-300 text-red-600'
@@ -148,7 +148,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
         </button>
 
         {/* Remove */}
-        {(!isSystemField || isSessionTemplate) && !readOnly && (
+        {!readOnly && (!isSystemField || !field.required) && (
           <button type="button" onClick={onRemove} className="text-red-300 hover:text-red-500 flex-shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -249,11 +249,18 @@ const FieldRow: React.FC<FieldRowProps> = ({
             </div>
           )}
 
-          {isSystemField && !readOnly && (
-            <div className="sm:col-span-2 lg:col-span-3">
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                This is a system field. Type and section are locked; you can still edit the label, placeholder, and help text.
-              </p>
+          {!readOnly && (
+            <div className="sm:col-span-2 lg:col-span-3 mt-2 pt-3 border-t border-gray-100 flex justify-between items-center">
+              {isSystemField ? (
+                <p className="text-xs text-amber-600 font-medium">This is a system field.</p>
+              ) : (
+                <div />
+              )}
+              {(!isSystemField || !field.required) && (
+                <button type="button" onClick={onRemove} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition">
+                  Delete Field
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -464,12 +471,26 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
 
   const deleteForm = (formName: string) => {
     if (!onLayoutChange) return;
+
+    const hasRequired = fields.some(f => {
+      const nf = withDefaultLayout(f);
+      return (nf.form ?? 'Basic Info') === formName && f.required;
+    });
+
+    if (hasRequired) {
+      alert('Cannot delete this section: it contains compulsory fields.');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete "${formName}" and all its fields?`)) {
+      return;
+    }
+
     const nextForms = forms.filter((f) => f.name !== formName).map((f, idx) => ({ ...f, order: idx }));
     setLayout({ forms: nextForms });
-    onChange(fields.map((f) => {
+    onChange(fields.filter((f) => {
       const nf = withDefaultLayout(f);
-      if ((nf.form ?? 'Basic Info') === formName) return { ...f, form: 'Basic Info', category: 'General' };
-      return f;
+      return (nf.form ?? 'Basic Info') !== formName;
     }));
     if (activeForm === formName) setActiveForm('');
   };
@@ -515,6 +536,21 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
 
   const deleteCategory = (formName: string, catName: string) => {
     if (!onLayoutChange) return;
+
+    const hasRequired = fields.some(f => {
+      const nf = withDefaultLayout(f);
+      return (nf.form ?? 'Basic Info') === formName && (nf.category ?? 'General') === catName && f.required;
+    });
+
+    if (hasRequired) {
+      alert('Cannot delete this category: it contains compulsory fields.');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete "${catName}" and all its fields?`)) {
+      return;
+    }
+
     const nextForms = forms.map((f) => ({ ...f, categories: (f.categories ?? []).slice() }));
     const form = nextForms.find((f) => f.name === formName);
     if (!form) return;
@@ -522,11 +558,10 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
     form.categories = (form.categories ?? []).filter((c) => c.name !== catName).map((c, idx) => ({ ...c, order: idx }));
     setLayout({ forms: nextForms.map((f, idx) => ({ ...f, order: idx })) });
 
-    // Move any fields in this category to General
-    onChange(fields.map((f) => {
+    // Delete fields in this category
+    onChange(fields.filter((f) => {
       const nf = withDefaultLayout(f);
-      if ((nf.form ?? 'Basic Info') === formName && (nf.category ?? 'General') === catName) return { ...f, category: 'General' };
-      return f;
+      return !((nf.form ?? 'Basic Info') === formName && (nf.category ?? 'General') === catName);
     }));
   };
 
@@ -779,6 +814,26 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                         {group.map(({ f, idx }, i) => (
                           <div
                             key={`${f.key}-${idx}`}
+                            onDragOver={(e) => {
+                              if (readOnly) return;
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                            }}
+                            onDrop={(e) => {
+                              if (readOnly) return;
+                              e.preventDefault();
+                              const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+                              let payload: any = null;
+                              try { payload = JSON.parse(raw); } catch { payload = null; }
+                              const from = payload?.type === 'field' ? Number(payload.fromIndex) : dragState.type === 'field' ? (dragState.fromIndex ?? NaN) : NaN;
+                              const fromForm = payload?.fromForm ?? dragState.fromForm;
+                              const fromCategory = payload?.fromCategory ?? dragState.fromCategory;
+                              if (!Number.isFinite(from) || fromForm !== resolvedActiveForm || fromCategory !== cat.name) return;
+                              const to = i;
+                              if (from === to) return;
+                              reorderWithinGroup(resolvedActiveForm, cat.name, from, to);
+                              setDragState({ type: null });
+                            }}
                           >
                             <FieldRow
                               field={f}
@@ -801,26 +856,6 @@ export const FieldBuilder: React.FC<FieldBuilderProps> = ({ fields, onChange, la
                                   }));
                                   e.dataTransfer.effectAllowed = 'move';
                                   setDragState({ type: 'field', fromForm: resolvedActiveForm, fromCategory: cat.name, fromIndex: i });
-                                },
-                                onDragOver: (e) => {
-                                  if (readOnly) return;
-                                  e.preventDefault();
-                                  e.dataTransfer.dropEffect = 'move';
-                                },
-                                onDrop: (e) => {
-                                  if (readOnly) return;
-                                  e.preventDefault();
-                                  const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
-                                  let payload: any = null;
-                                  try { payload = JSON.parse(raw); } catch { payload = null; }
-                                  const from = payload?.type === 'field' ? Number(payload.fromIndex) : dragState.type === 'field' ? (dragState.fromIndex ?? NaN) : NaN;
-                                  const fromForm = payload?.fromForm ?? dragState.fromForm;
-                                  const fromCategory = payload?.fromCategory ?? dragState.fromCategory;
-                                  if (!Number.isFinite(from) || fromForm !== resolvedActiveForm || fromCategory !== cat.name) return;
-                                  const to = i;
-                                  if (from === to) return;
-                                  reorderWithinGroup(resolvedActiveForm, cat.name, from, to);
-                                  setDragState({ type: null });
                                 },
                                 onDragEnd: () => setDragState({ type: null }),
                               }}

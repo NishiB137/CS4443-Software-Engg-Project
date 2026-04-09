@@ -6,7 +6,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export type FieldType =
   | 'text' | 'textarea' | 'number' | 'date' | 'time' | 'datetime'
-  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone' | 'speakers';
+  | 'select' | 'multiselect' | 'toggle' | 'url' | 'email' | 'phone' | 'speakers'
+  | 'file_image' | 'file_video' | 'file_image_multiple';
 
 export interface IFieldSpec {
   key: string;           // unique camelCase key, maps to EventFormData field
@@ -96,7 +97,7 @@ export interface IEventTemplate extends Document {
 const FieldSpecSchema = new Schema<IFieldSpec>({
   key:          { type: String, required: true },
   label:        { type: String, required: true },
-  fieldType:    { type: String, required: true, enum: ['text','textarea','number','date','time','datetime','select','multiselect','toggle','url','email','phone','speakers'] },
+  fieldType:    { type: String, required: true, enum: ['text','textarea','number','date','time','datetime','select','multiselect','toggle','url','email','phone','speakers', 'file_image', 'file_video', 'file_image_multiple'] },
   required:     { type: Boolean, default: false },
   defaultValue: { type: String },
   placeholder:  { type: String },
@@ -140,7 +141,7 @@ const SessionTemplateSchema = new Schema<ISessionTemplate>({
 const EventTemplateSchema = new Schema<IEventTemplate>({
   name:        { type: String, required: true, trim: true },
   description: { type: String, default: '' },
-  eventType:   { type: String, enum: ['conference','workshop','hackathon','concert','exhibition','summit','festival','competition','webinar','other'], default: 'other' },
+  eventType:   { type: String, default: 'other' },
   format:      { type: String, enum: ['physical','virtual','hybrid'], default: 'physical' },
   isFree:      { type: Boolean, default: true },
 

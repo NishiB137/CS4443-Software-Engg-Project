@@ -23,6 +23,10 @@ const inp = (err?: boolean) =>
    ${err ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'}`;
 const lbl = 'block text-sm font-medium text-gray-700 mb-1';
 
+// ─── Registration form is now handled directly by standard FieldBuilder ───
+
+
+
 interface Props {
   templateId?: string;   // undefined = create mode
   /** When true (view route), all fields are read-only. Default templates opened on /edit redirect to the view route. */
@@ -41,7 +45,11 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
 
   const [form, setForm] = useState<Partial<ApiTemplate>>({
     name: '', description: '', eventType: 'other', format: 'physical',
-    isFree: true, coverColor: '#2563EB', tags: [], fields: [],
+    isFree: true, coverColor: '#2563EB', tags: [],
+    fields: [
+      { key: 'attendeeName', label: 'Full Name', fieldType: 'text', required: true, section: 'custom', order: 60, form: 'Registration', category: 'Contact Info', formOrder: 2, categoryOrder: 0 },
+      { key: 'attendeeEmail', label: 'Email Address', fieldType: 'email', required: true, section: 'custom', order: 61, form: 'Registration', category: 'Contact Info', formOrder: 2, categoryOrder: 0 },
+    ] as FieldSpec[],
     sessionTemplates: [], defaultVisibility: 'public', defaultStatus: 'draft',
     defaultPolicies: {
       refundPolicy: 'no_refund',
@@ -50,7 +58,7 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
     },
     allowsSubEvents: true,
     maxSubEventDepth: 1,
-    layout: { forms: [] },
+    layout: undefined,
   });
 
   // Load existing template — default templates cannot use /edit (redirect to view-only route)
@@ -245,11 +253,11 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
               <label className={lbl}>Default Visibility</label>
               <select className={inp()} value={form.defaultVisibility || 'public'} disabled={viewOnly}
                 onChange={(e) => upd({ defaultVisibility: e.target.value })}>
-                <option value="public">Public</option>
-                <option value="restricted">Restricted</option>
-                <option value="hidden_link">Hidden (Link only)</option>
-                <option value="hidden_authenticated">Hidden (Auth + Link)</option>
+                <option value="public">Public — Anyone can find and join</option>
+                <option value="hidden_link">Link Only — Only people with the link can access</option>
+                <option value="hidden_authenticated">Invite Only — Private, requires invitation</option>
               </select>
+              <p className="text-xs text-gray-400 mt-1">The default selected visibility when an organizer uses this template.</p>
             </div>
           </div>
 
@@ -288,10 +296,11 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
               <h3 className="text-sm font-bold text-gray-900">Event Fields</h3>
               <p className="text-xs text-gray-500 mt-0.5">
                 Define which fields appear in the event creation form when this template is selected.
+                The <span className="font-semibold text-indigo-600">Registration</span> tab controls what info is collected from attendees.
               </p>
             </div>
             <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full border border-blue-100 font-medium">
-              {(form.fields || []).length} fields
+              {(form.fields || []).filter(f => (f as FieldSpec & { form?: string }).form !== 'Registration').length} event fields
             </span>
           </div>
           <FieldBuilder
