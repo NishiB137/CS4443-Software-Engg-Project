@@ -34,6 +34,7 @@ export interface IEvent extends Document {
   eventLevel: 'main' | 'sub';
 
   eventType: string;
+  customEventType?: string;
   format: 'physical' | 'virtual' | 'hybrid';
   tags: mongoose.Types.ObjectId[];
   isFree: boolean;
@@ -76,6 +77,19 @@ export interface IEvent extends Document {
   templateId?: mongoose.Types.ObjectId;
   // NEW: Dynamic Custom Fields
   customFields: Array<{ key: string; label: string; value: any }>;
+
+  // Registration control
+  requiresRegistration: boolean;
+  registrationFields: Array<{
+    key: string;
+    label: string;
+    fieldType: 'text' | 'email' | 'phone' | 'textarea' | 'select';
+    required: boolean;
+    options?: string[];
+    category?: string;
+    categoryOrder?: number;
+    order?: number;
+  }>;
   
   changeLog: any[];
   metaTitle?: string;
@@ -97,8 +111,9 @@ const EventSchema = new Schema<IEvent>({
   createdBy:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
   parentEvent:  { type: Schema.Types.ObjectId, ref: 'Event', default: null },
   eventLevel:   { type: String, enum: ['main', 'sub'], default: 'main' },
-  eventType: { type: String, enum: ['conference', 'workshop', 'hackathon', 'concert', 'exhibition', 'summit', 'festival', 'competition', 'webinar', 'other'], default: 'other' },
-  format:    { type: String, enum: ['physical', 'virtual', 'hybrid'], default: 'physical' },
+  eventType:       { type: String, default: 'other' },
+  customEventType: { type: String, default: '' },
+  format:          { type: String, enum: ['physical', 'virtual', 'hybrid'], default: 'physical' },
   tags:      [{ type: Schema.Types.ObjectId, ref: 'Tag' }],
   isFree:    { type: Boolean, default: false },
   notes:     { type: String, maxlength: 2000 },
@@ -133,16 +148,31 @@ const EventSchema = new Schema<IEvent>({
     key: { type: String, required: true },
     label: { type: String, required: true },
     value: { type: Schema.Types.Mixed }
-  }]
+  }],
+
+  // Registration control
+  requiresRegistration: { type: Boolean, default: false },
+  registrationFields: [{
+    key:           { type: String, required: true },
+    label:         { type: String, required: true },
+    fieldType:     { type: String, enum: ['text', 'email', 'phone', 'textarea', 'select'], default: 'text' },
+    required:      { type: Boolean, default: false },
+    options:       [{ type: String }],
+    category:      { type: String },
+    categoryOrder: { type: Number, default: 0 },
+    order:         { type: Number, default: 0 },
+  }],
 }, { timestamps: true });
 
-EventSchema.index({ status: 1 });
-EventSchema.index({ visibility: 1 });
-EventSchema.index({ isFree: 1 });
-EventSchema.index({ tags: 1 });
-EventSchema.index({ startDate: 1 });
-EventSchema.index({ organization: 1 });
-EventSchema.index({ parentEvent: 1 });
-EventSchema.index({ title: 'text', shortDescription: 'text' });
+// ─── Indexes ─────────────────────────────────────────────────────────────────────
+EventSchema.index({ status: 1, startDate: 1 });       // list + sort by upcoming
+EventSchema.index({ organization: 1, status: 1 });    // organizer dashboard
+EventSchema.index({ visibility: 1 });                 // public discovery filter
+EventSchema.index({ tags: 1 });                       // tag filter
+// Full-text search (title weighted highest, then shortDescription > description > organizer)
+EventSchema.index(
+  { title: 'text', shortDescription: 'text', description: 'text', organizerName: 'text' },
+  { weights: { title: 10, shortDescription: 5, description: 2, organizerName: 1 }, name: 'event_text_search' }
+);
 
 export const Event = mongoose.model<IEvent>('Event', EventSchema);

@@ -1,12 +1,14 @@
-import React from 'react';
+import { useBlocker } from 'react-router-dom';
 import { useEventWizard } from '@/modules/eventCreation/microFrontends/eventWizard/hooks/useEventWizard';
 import { Stepper } from '@/modules/eventCreation/components/Stepper.tsx';
 import { Step1Template } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step1Template';
 import { GenericFormStep } from '@/modules/eventCreation/microFrontends/eventWizard/components/GenericFormStep';
 import { Step3Visibility } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step3Visibility';
+import { StepRegistration } from '@/modules/eventCreation/microFrontends/eventWizard/components/StepRegistration';
 import { Step4Sessions } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Sessions';
 import { Step5Faq } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step5Faq';
 import { Step4Review } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Review';
+import { TicketingTiersStep } from '@/modules/eventCreation/microFrontends/eventWizard/components/TicketingTiersStep';
 
 import type { ApiEvent } from '@/services/api';
 
@@ -23,7 +25,19 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
     isSubmitting,
     submitError,
     stepErrors,
+    saveAsTemplate,
+    isDirty,
+    setIsDirty,
+    originalStatus,
   } = useEventWizard({ initialEventData, eventId });
+
+  const isEditingPublished = !!eventId && originalStatus === 'published';
+
+  // ─── Block navigation if there are unsaved changes ─────────
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirty && !isSubmitting && currentLocation.pathname !== nextLocation.pathname
+  );
 
   const renderStepContent = () => {
     const props = {
@@ -39,6 +53,8 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
       case 'template': return <Step1Template {...props} />;
       case 'form': return <GenericFormStep formName={stepDef.formName!} {...props} />;
       case 'visibility': return <Step3Visibility {...props} />;
+      case 'registration': return <StepRegistration {...props} />;
+      case 'ticketingTiers': return <TicketingTiersStep {...props} />;
       case 'sessions': return <Step4Sessions {...props} />;
       case 'faq': return <Step5Faq {...props} />;
       case 'review': return <Step4Review {...props} />;
@@ -54,6 +70,44 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
 
       {currentStep > 1 && (
         <Stepper currentStep={currentStep} steps={stepTitles} />
+      )}
+
+      {/* Unsaved Changes Blocker Modal */}
+      {blocker.state === 'blocked' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Unsaved Changes</h3>
+            <p className="text-gray-600 mb-6">
+              You have unsaved progress in the event wizard. Are you sure you want to leave? Your changes will be lost if you discard them.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+              <button
+                onClick={() => blocker.reset()}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setIsDirty(false); // Clear dirty state so we can navigate
+                  setTimeout(() => blocker.proceed(), 0);
+                }}
+                className="px-4 py-2 text-red-700 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition"
+              >
+                Discard Changes
+              </button>
+              <button
+                onClick={async () => {
+                  blocker.reset();
+                  await submitEvent(true);
+                }}
+                className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium shadow-sm transition flex items-center justify-center"
+              >
+                Save as Draft
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Step-level error summary banner */}
@@ -107,6 +161,14 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
 
         <div className="flex items-center gap-3">
           <button
+            onClick={saveAsTemplate}
+            disabled={isSubmitting}
+            className="px-6 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-100 font-medium transition disabled:opacity-50 text-sm"
+          >
+            Save as Template
+          </button>
+
+          <button
             onClick={() => submitEvent(true)}
             disabled={isSubmitting}
             className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition disabled:opacity-50 text-sm flex items-center gap-2"
@@ -114,7 +176,11 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
             {isSubmitting && formData.submitAs === 'draft' && (
               <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span>
             )}
-            {isSubmitting && formData.submitAs === 'draft' ? 'Saving...' : 'Save as Draft'}
+            {isSubmitting && formData.submitAs === 'draft'
+              ? 'Saving...'
+              : isEditingPublished
+              ? 'Save Changes as Draft'
+              : 'Save as Draft'}
           </button>
 
           {currentStep < totalSteps ? (
@@ -131,7 +197,9 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
             <button
               onClick={() => submitEvent(false)}
               disabled={isSubmitting}
-              className="px-8 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold transition shadow-md disabled:opacity-60 text-sm flex items-center gap-2"
+              className={`px-8 py-2.5 text-white rounded-lg font-bold transition shadow-md disabled:opacity-60 text-sm flex items-center gap-2 ${
+                isEditingPublished ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'
+              }`}
             >
               {isSubmitting && formData.submitAs !== 'draft' ? (
                 <>
@@ -139,14 +207,14 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
-                  Publishing...
+                  {isEditingPublished ? 'Saving...' : 'Publishing...'}
                 </>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
                   </svg>
-                  Publish Event
+                  {isEditingPublished ? 'Save & Keep Published' : 'Publish Event'}
                 </>
               )}
             </button>

@@ -22,6 +22,7 @@ export interface SessionFormData {
   startTime: string;
   endDate: string;
   endTime: string;
+  timezone: string;
   room: string;
   streamUrl: string;
   maxAttendees: string;
@@ -42,6 +43,7 @@ export const EMPTY_SESSION: SessionFormData = {
   startTime: '',
   endDate: '',
   endTime: '',
+  timezone: '',
   room: '',
   streamUrl: '',
   maxAttendees: '',
@@ -70,30 +72,46 @@ export const LIMITS = {
   speakerTopic: { max: 200 },
 } as const;
 
+// ─── Registration field definition ──────────────────────────────────────────
+
+export interface RegistrationField {
+  key: string;
+  label: string;
+  fieldType: 'text' | 'email' | 'phone' | 'textarea' | 'select';
+  required: boolean;
+  options?: string[];
+}
+
+// ─── Ticketing Tier definition ────────────────────────────────────────────────
+
+export interface TicketingTier {
+  name: string;
+  price: number;
+  capacity: number;
+  description?: string;
+}
+
+/** Built-in fields that organizers can include on the registration form */
+export const REGISTRATION_FIELD_OPTIONS: RegistrationField[] = [
+  { key: 'attendeeName',         label: 'Full Name',               fieldType: 'text',     required: true  },
+  { key: 'attendeeEmail',        label: 'Email Address',            fieldType: 'email',    required: true  },
+  { key: 'attendeePhone',        label: 'Phone Number',             fieldType: 'phone',    required: false },
+  { key: 'organization',         label: 'Company / Organization',   fieldType: 'text',     required: false },
+  { key: 'jobTitle',             label: 'Job Title / Designation',  fieldType: 'text',     required: false },
+  { key: 'teamName',             label: 'Team Name',                fieldType: 'text',     required: false },
+  { key: 'teamSize',             label: 'Team Size',                fieldType: 'text',     required: false },
+  { key: 'dietaryNeeds',         label: 'Dietary Needs',            fieldType: 'select',   required: false, options: ['None', 'Vegetarian', 'Vegan', 'Gluten-free', 'Halal', 'Kosher'] },
+  { key: 'tShirtSize',          label: 'T-Shirt Size',             fieldType: 'select',   required: false, options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] },
+  { key: 'specialRequirements', label: 'Special Requirements',     fieldType: 'textarea', required: false },
+  { key: 'message',             label: 'Message to Organizer',     fieldType: 'textarea', required: false },
+];
+
 // ─── Main event form data ─────────────────────────────────────────────────────
 
 export interface EventFormData {
   template: string;
   templateName: string;
-  templateFields: Array<{
-    key: string;
-    label: string;
-    fieldType: string;
-    required: boolean;
-    defaultValue?: string;
-    placeholder?: string;
-    helpText?: string;
-    options?: string[];
-    min?: number;
-    max?: number;
-    maxLength?: number;
-    section: string;
-    order: number;
-    form?: string;
-    category?: string;
-    formOrder?: number;
-    categoryOrder?: number;
-  }>;
+  templateFields: FieldSpec[];
   sessionTemplates: Array<{
     title: string;
     sessionType: string;
@@ -112,6 +130,7 @@ export interface EventFormData {
   secondaryImages: string[];
   videoUrl: string;
   eventType: string;
+  customEventType?: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
   tags: string[];
@@ -131,7 +150,11 @@ export interface EventFormData {
     onlineLink: string;
     shareOnlineLinkLater?: string;
   };
-  visibility: 'public' | 'restricted' | 'hidden_link' | 'hidden_authenticated';
+  visibility: 'public' | 'hidden_link' | 'hidden_authenticated';
+  /** Whether attendees must register to attend */
+  requiresRegistration: boolean;
+  /** Which fields to display on the registration form */
+  registrationFields: RegistrationField[];
   policies: {
     refundPolicy: 'full' | 'partial' | 'no_refund' | '';
     cancellationPolicy: string;
@@ -139,6 +162,8 @@ export interface EventFormData {
   };
   organizerName: string;
   pocDetails: { name: string; email: string; phone: string };
+  /** Ticketing tiers for non-free events */
+  ticketingTiers: TicketingTier[];
   faqs: Array<{ question: string; answer: string }>;
   sessions: SessionFormData[];
   submitAs: 'draft' | 'review' | 'approved' | 'published' | 'ongoing' | 'completed' | 'archived';
@@ -171,7 +196,7 @@ export const currentTime = (): string => {
 export interface StepDef {
   id: string;
   title: string;
-  type: 'template' | 'form' | 'visibility' | 'sessions' | 'faq' | 'review';
+  type: 'template' | 'form' | 'visibility' | 'registration' | 'ticketingTiers' | 'sessions' | 'faq' | 'review';
   formName?: string;
 }
 
@@ -194,6 +219,12 @@ export const validateStep4 = (data: EventFormData): StepErrors => {
 export const validateStep = (step: StepDef, data: EventFormData): StepErrors => {
   if (step.type === 'template') return validateStep1(data);
   if (step.type === 'visibility') return {};
+  if (step.type === 'registration') {
+    if (data.requiresRegistration && data.registrationFields.length === 0) {
+      return { registration: 'Please select at least one field to collect from attendees.' };
+    }
+    return {};
+  }
   if (step.type === 'sessions') return validateStep4(data);
   if (step.type === 'review') return {};
 
@@ -208,7 +239,7 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
             if (f.key.startsWith('venue_')) return data.venue[f.key.replace('venue_', '') as keyof typeof data.venue];
             if (f.key === 'refundPolicy' || f.key === 'cancellationPolicy' || f.key === 'attendeeMinAge') return data.policies[f.key as keyof typeof data.policies];
             if (f.key === 'shareOnlineLinkLater') return data.venue.shareOnlineLinkLater;
-            return (data as any)[f.key];
+            return (data as unknown as Record<string, unknown>)[f.key];
           })()
         : data.customFieldValues[f.key];
 
@@ -222,8 +253,8 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
       }
       if (f.fieldType === 'number' && strVal) {
         const numVal = Number(strVal);
-        const mn = typeof f.min === 'number' ? f.min : (LIMITS[f.key as keyof typeof LIMITS] as any)?.min;
-        const mx = typeof f.max === 'number' ? f.max : (LIMITS[f.key as keyof typeof LIMITS] as any)?.max;
+        const mn = typeof f.min === 'number' ? f.min : (LIMITS as Record<string, { min?: number; max?: number }>)[f.key]?.min;
+        const mx = typeof f.max === 'number' ? f.max : (LIMITS as Record<string, { min?: number; max?: number }>)[f.key]?.max;
         if (mn !== undefined && numVal < mn) errors[f.key] = `${f.label} minimum is ${mn}.`;
         if (mx !== undefined && numVal > mx) errors[f.key] = `${f.label} cannot exceed ${mx}.`;
       }
@@ -244,7 +275,8 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
 
       const start = startStr ? new Date(startStr) : null;
       const end = endStr ? new Date(endStr) : null;
-      const now = new Date();
+      const nowStrTz = new Date().toLocaleString('en-US', { timeZone: data.timezone || 'UTC' });
+      const now = new Date(nowStrTz);
 
       if (hasStart && start) {
         if (isNaN(start.getTime()) || start.getFullYear() < 2000) errors['startDate'] = 'Start date/time is not a valid date.';
