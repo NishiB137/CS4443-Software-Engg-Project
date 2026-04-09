@@ -1,7 +1,9 @@
 import React from 'react';
 import { LIMITS } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
-import type { WizardStepProps } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
+import type { WizardStepProps, StepErrors } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import { uploadApi } from '@/services/api';
+import { DateTimePicker } from '@/modules/eventCreation/microFrontends/eventWizard/components/DateTimePicker';
+import { TimezoneSelector } from '@/modules/eventCreation/microFrontends/eventWizard/components/TimezoneSelector';
 
 interface GenericFormStepProps extends WizardStepProps {
   formName: string;
@@ -16,7 +18,7 @@ const inputCls = (hasError?: boolean) =>
 
 const labelCls = 'block text-sm font-medium text-gray-700 mb-1';
 
-const FieldError: React.FC<{ msg?: string }> = ({ msg }) =>
+const FieldError = ({ msg }: { msg?: string }) =>
   msg ? (
     <p className="mt-1 text-xs text-red-600 font-medium flex items-center gap-1">
       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -26,7 +28,7 @@ const FieldError: React.FC<{ msg?: string }> = ({ msg }) =>
     </p>
   ) : null;
 
-const CharCount: React.FC<{ current: number; max: number }> = ({ current, max }) => {
+const CharCount = ({ current, max }: { current: number; max: number }) => {
   const near = current > max * 0.85;
   const over = current > max;
   return (
@@ -36,16 +38,17 @@ const CharCount: React.FC<{ current: number; max: number }> = ({ current, max })
   );
 };
 
-export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data, updateData, errors = {} }) => {
+export const GenericFormStep = ({ formName, data, updateData, errors = {} }: GenericFormStepProps) => {
+  const typedErrors: StepErrors = errors;
   const [uploadingField, setUploadingField] = React.useState<string | null>(null);
-  const fields = data.templateFields.filter(f => f.form === formName);
+  const fields = data.templateFields.filter((f) => f.form === formName);
 
   const getSystemValue = (key: string): string => {
     if (key.startsWith('venue_')) return data.venue[key.replace('venue_', '') as keyof typeof data.venue] ?? '';
     if (key === 'refundPolicy' || key === 'cancellationPolicy' || key === 'attendeeMinAge') return data.policies[key as keyof typeof data.policies] as string;
     if (key === 'shareOnlineLinkLater') return data.venue.shareOnlineLinkLater ?? '';
     if (key === 'onlineLink') return data.venue.onlineLink ?? '';
-    return (data as any)[key] as string;
+    return (data as unknown as Record<string, unknown>)[key] as string;
   };
 
   const setSystemValue = (key: string, value: string) => {
@@ -87,7 +90,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
 
   const arrayFieldKeys = new Set(['secondaryImages']);
 
-  const categories = data.templateLayout?.forms?.find(f => f.name === formName)?.categories || [];
+  const categories = data.templateLayout?.forms?.find((f) => f.name === formName)?.categories || [];
   const categoriesMap = fields.reduce<Record<string, typeof fields>>((acc, f) => {
     const cat = f.category || 'General';
     if (!acc[cat]) acc[cat] = [];
@@ -95,9 +98,9 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
     return acc;
   }, {});
 
-  const sortedCategoryNames = Object.keys(categoriesMap).sort((a, b) => {
-    const c1 = categories.find(c => c.name === a);
-    const c2 = categories.find(c => c.name === b);
+  const sortedCategoryNames = Object.keys(categoriesMap).sort((a: string, b: string) => {
+    const c1 = categories.find((c) => c.name === a);
+    const c2 = categories.find((c) => c.name === b);
     
     const orderA = c1?.order ?? categoriesMap[a][0]?.categoryOrder ?? 999;
     const orderB = c2?.order ?? categoriesMap[b][0]?.categoryOrder ?? 999;
@@ -105,38 +108,34 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
     return orderA - orderB || a.localeCompare(b);
   });
 
-  const forms = data.templateLayout?.forms ?? [];
-  const formIndex = forms.findIndex(f => f.name === formName);
-  const formNumber = formIndex >= 0 ? formIndex + 1 : 1;
-
   return (
     <div className="max-w-3xl mx-auto animate-fadeIn">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">{formNumber}. {formName}</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-6">{formName}</h2>
       
       <div className="space-y-8">
         {sortedCategoryNames.map((categoryName) => {
           const catFields = categoriesMap[categoryName];
-          const catIndex = (forms[formIndex]?.categories?.findIndex(c => c.name === categoryName) ?? -1) + 1;
-          const catNumberStr = catIndex > 0 ? `${formNumber}.${catIndex}. ` : '';
           return (
           <div key={categoryName} className="bg-white p-5 md:p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group">
             <div className="mb-5 pb-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{catNumberStr}{categoryName}</h3>
+              <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{categoryName}</h3>
             </div>
             <div className="space-y-5">
-              {catFields.map((f, fIdx) => {
+              {catFields.map((f) => {
+                if (f.key === 'startTime' || f.key === 'endTime') return null;
+
                 const isSystem = systemFieldKeys.has(f.key);
                 const isArrayField = arrayFieldKeys.has(f.key);
-                const val = isArrayField
+                const val = (isArrayField
                   ? getArraySystemValue(f.key)
-                  : isSystem ? getSystemValue(f.key) : getCustomValue(f.key);
+                  : isSystem ? getSystemValue(f.key) : getCustomValue(f.key)) as string | string[];
+
                 const setVal = (v: string) => isSystem ? setSystemValue(f.key, v) : setCustomValue(f.key, v);
                 const setArrVal = (v: string[]) => setArraySystemValue(f.key, v);
-                const hasError = !!errors[f.key];
-                const fieldNumberStr = catIndex > 0 ? `${formNumber}.${catIndex}.${fIdx + 1}. ` : '';
+                const hasError = !!typedErrors[f.key];
 
-                const resolvedMin = typeof f.min === 'number' ? f.min : (LIMITS[f.key as keyof typeof LIMITS] as any)?.min;
-                const resolvedMax = f.maxLength || f.max || (LIMITS[f.key as keyof typeof LIMITS] as any)?.max;
+                const resolvedMin = typeof f.min === 'number' ? f.min : (LIMITS as Record<string, { min?: number; max?: number }>)[f.key]?.min;
+                const resolvedMax = f.maxLength || f.max || (LIMITS as Record<string, { min?: number; max?: number }>)[f.key]?.max;
 
                 const common = {
                   className: inputCls(hasError),
@@ -147,7 +146,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                 return (
                   <div key={f.key}>
                     <label className={labelCls}>
-                      {fieldNumberStr}{f.label}
+                      {f.key === 'startDate' ? 'Start Date & Time' : f.key === 'endDate' ? 'End Date & Time' : f.label}
                       {f.required && <span className="text-red-500"> *</span>}
                     </label>
 
@@ -163,7 +162,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                       <div>
                         <textarea rows={5} placeholder={f.placeholder} maxLength={f.maxLength} {...common} />
                         <div className="flex items-start justify-between">
-                          <FieldError msg={errors[f.key]} />
+                          <FieldError msg={typedErrors[f.key]} />
                           {f.maxLength && <CharCount current={val.length} max={f.maxLength} />}
                         </div>
                       </div>
@@ -171,11 +170,20 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                       <div>
                         <select {...common}>
                           <option value="">Select</option>
-                          {(f.options ?? []).map((opt) => (
+                          {(f.options ?? []).map((opt: string) => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
                         </select>
-                        <FieldError msg={errors[f.key]} />
+                        {f.key === 'eventType' && val === 'other' && (
+                          <input
+                            type="text"
+                            placeholder="Specify custom event type"
+                            className={`mt-2 ${inputCls()}`}
+                            value={data.customEventType || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateData({ customEventType: e.target.value })}
+                          />
+                        )}
+                        <FieldError msg={typedErrors[f.key]} />
                       </div>
                     ) : f.fieldType === 'toggle' ? (
                       <div>
@@ -195,7 +203,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                           </button>
                           <span className="ml-3 text-sm font-medium text-gray-900">{val === 'true' ? 'Yes' : 'No'}</span>
                         </div>
-                        <FieldError msg={errors[f.key]} />
+                        <FieldError msg={typedErrors[f.key]} />
                       </div>
                     ) : f.fieldType === 'file_image_multiple' ? (
                       <div>
@@ -238,7 +246,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                                   const currentArr = Array.isArray(val) ? (val as string[]) : [];
                                   const remainingSlots = 5 - currentArr.length;
                                   const toUpload = files.slice(0, remainingSlots);
-                                  const newUrls = await Promise.all(toUpload.map(file => uploadApi.uploadFile(file)));
+                                  const newUrls = await Promise.all(toUpload.map(file => uploadApi.uploadFile(file as File)));
                                   setArrVal([...currentArr, ...newUrls]);
                                 } catch (err: unknown) {
                                   alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -250,7 +258,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                             />
                           </label>
                         )}
-                        <FieldError msg={errors[f.key]} />
+                        <FieldError msg={typedErrors[f.key]} />
                       </div>
                     ) : f.fieldType === 'file_image' || f.fieldType === 'file_video' ? (
                       <div>
@@ -279,10 +287,10 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                               if (!file) return;
                               try {
                                 setUploadingField(f.key);
-                                const url = await uploadApi.uploadFile(file);
-                                setVal(url as any);
-                              } catch (err: any) {
-                                alert('Upload failed: ' + err.message);
+                                const url = await uploadApi.uploadFile(file as File);
+                                setVal(url);
+                              } catch (err: unknown) {
+                                alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)));
                               } finally {
                                 setUploadingField(null);
                                 e.target.value = '';
@@ -290,7 +298,30 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                             }}
                           />
                         </label>
-                        <FieldError msg={errors[f.key]} />
+                        <FieldError msg={typedErrors[f.key]} />
+                      </div>
+                    ) : f.key === 'timezone' ? (
+                      <div>
+                        <TimezoneSelector
+                          id={f.key}
+                          value={val as string}
+                          onChange={(tz) => setVal(tz)}
+                        />
+                        <FieldError msg={typedErrors[f.key]} />
+                      </div>
+                    ) : f.key === 'startDate' || f.key === 'endDate' ? (
+                      <div>
+                        <DateTimePicker
+                          id={f.key}
+                          dateValue={val as string}
+                          timeValue={f.key === 'startDate' ? getSystemValue('startTime') : getSystemValue('endTime')}
+                          onChange={(d, t) => {
+                            setVal(d);
+                            setSystemValue(f.key === 'startDate' ? 'startTime' : 'endTime', t);
+                          }}
+                          className={hasError ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50' : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500 hover:bg-gray-50 bg-white'}
+                        />
+                        <FieldError msg={typedErrors[f.key] || typedErrors[f.key === 'startDate' ? 'startTime' : 'endTime']} />
                       </div>
                     ) : (
                       <div>
@@ -301,8 +332,7 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                                 : f.fieldType === 'email' ? 'email'
                                   : f.fieldType === 'phone' ? 'tel'
                                     : f.fieldType === 'date' ? 'date'
-                                      : f.fieldType === 'time' ? 'time'
-                                        : 'text'
+                                      : 'text'
                           }
                           placeholder={f.placeholder}
                           maxLength={f.maxLength}
@@ -311,8 +341,8 @@ export const GenericFormStep: React.FC<GenericFormStepProps> = ({ formName, data
                           {...common}
                         />
                         <div className="flex items-start justify-between">
-                          <FieldError msg={errors[f.key]} />
-                          {f.maxLength && f.fieldType !== 'date' && f.fieldType !== 'time' && <CharCount current={val.length} max={f.maxLength} />}
+                          <FieldError msg={typedErrors[f.key]} />
+                          {f.maxLength && f.fieldType !== 'date' && f.fieldType !== 'time' && <CharCount current={(val as string).length || 0} max={f.maxLength} />}
                         </div>
                       </div>
                     )}
