@@ -1,5 +1,5 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useEvents } from './hooks/UseEvents';
 import { EventCard } from '@/shared/components/EventCard';
 
@@ -7,7 +7,7 @@ export const EventCatalogMFE: React.FC = () => {
   const navigate = useNavigate();
   const { 
     events, loading, error,
-    searchQuery, setSearchQuery,
+    searchQuery,
     filterType, setFilterType,
     category, setCategory,
     formatFilter, setFormatFilter,
@@ -18,6 +18,21 @@ export const EventCatalogMFE: React.FC = () => {
     currentPage, setCurrentPage, totalPages,
   } = useEvents();
 
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('search')) {
+      const section = document.getElementById('event-catalog-section');
+      if (section) {
+        // slight delay to ensure it scrolls effectively
+        setTimeout(() => {
+          section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    }
+  }, [location.search]);
+
   const handleCardClick = (id: string, slug: string) => {
     navigate(`/event?id=${id}&slug=${slug}`);
   };
@@ -26,7 +41,7 @@ export const EventCatalogMFE: React.FC = () => {
   const [filtersOpen, setFiltersOpen] = React.useState(false);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12">
+    <div id="event-catalog-section" className="max-w-7xl mx-auto px-6 py-12">
       <div className="mb-10 text-center">
         <h2 className="text-3xl font-extrabold text-text-primary">Discover Events</h2>
         <p className="text-text-secondary mt-2">Find your next amazing experience</p>
@@ -47,14 +62,6 @@ export const EventCatalogMFE: React.FC = () => {
         </div>
         
         <div className="flex gap-3 w-full lg:w-auto p-2">
-          {/* Search */}
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search events..."
-            className="bg-background border border-border text-text-primary text-sm rounded-lg px-4 py-2.5 outline-none focus:ring-2 focus:ring-primary flex-1 lg:w-48"
-          />
            <select 
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as 'All' | 'Free' | 'Paid')} 

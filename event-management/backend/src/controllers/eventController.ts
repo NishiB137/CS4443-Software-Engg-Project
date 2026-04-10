@@ -196,6 +196,31 @@ export const likeEvent = async (req: Request, res: Response) => {
   }
 };
 
+// ─── POST /api/events/:id/unlike — decrement public like counter ─────────────
+export const unlikeEvent = async (req: Request, res: Response) => {
+  try {
+    const updated = await eventService.decrementEventLikes(param(req, 'id'));
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Event not found' });
+      return;
+    }
+    // Prevent likes from falling below 0
+    if (updated.analytics && updated.analytics.likes < 0) {
+      await eventService.incrementEventLikes(param(req, 'id'));
+      res.json({ success: true, likes: 0 });
+      return;
+    }
+    
+    res.json({
+      success: true,
+      likes: updated.analytics?.likes ?? 0,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(500).json({ success: false, message });
+  }
+};
+
 // ─── POST /api/events/:id/view — increment public view counter ───────────────
 export const incrementView = async (req: Request, res: Response) => {
   try {
@@ -232,6 +257,7 @@ export const getChangelog = async (req: Request, res: Response) => {
 // ─── GET /api/events/hierarchy/tree ───────────────────────────────────────────
 import { Event } from '../models/Event.js';
 import { Session } from '../models/Session.js';
+import { EventTemplate, type IFieldSpec, type ISessionTemplate } from '../models/EventTemplate.js';
 
 export const getHierarchy = async (req: Request, res: Response) => {
   try {
@@ -256,6 +282,105 @@ export const getHierarchy = async (req: Request, res: Response) => {
     }));
 
     res.json({ success: true, data: hierarchy });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(500).json({ success: false, message });
+  }
+};
+
+// ─── POST /api/events/:id/save-as-template ────────────────────────────────────
+export const saveAsTemplate = async (req: Request, res: Response) => {
+  try {
+    const eventId = param(req, 'id');
+    const event = await Event.findById(eventId).lean();
+    if (!event) {
+      res.status(404).json({ success: false, message: 'Event not found.' });
+      return;
+    }
+
+    const templateName = (req.body as { name?: string }).name
+      || `${event.title} (Template)`;
+
+    // Find the linked template (if any) to copy its fields as the base
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let baseFields: any[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let baseLayout: any = undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let baseSessionTemplates: any[] = [];
+    if (event.templateId) {
+      const linked = await EventTemplate.findById(event.templateId).lean();
+      if (linked) {
+        const getSystemVal = (key: string): string | undefined => {
+          const sysMap: Record<string, any> = {
+            title: event.title,
+            shortDescription: event.shortDescription,
+            description: event.description,
+            coverImage: event.coverImage,
+            videoUrl: event.media?.videoUrl,
+            eventType: event.eventType,
+            format: event.format,
+            isFree: event.isFree !== undefined ? String(event.isFree) : undefined,
+            startDate: event.startDate ? new Date(event.startDate as any).toISOString().split('T')[0] : undefined,
+            startTime: event.startDate ? new Date(event.startDate as any).toISOString().split('T')[1]?.substring(0, 5) : undefined,
+            endDate: event.endDate ? new Date(event.endDate as any).toISOString().split('T')[0] : undefined,
+            endTime: event.endDate ? new Date(event.endDate as any).toISOString().split('T')[1]?.substring(0, 5) : undefined,
+            timezone: event.timezone,
+            maxCapacity: event.maxCapacity !== undefined ? String(event.maxCapacity) : undefined,
+            venue_name: event.venue?.name,
+            venue_address: event.venue?.address,
+            venue_city: event.venue?.city,
+            venue_state: event.venue?.state,
+            venue_country: event.venue?.country,
+            onlineLink: event.venue?.onlineLink,
+            organizerName: event.organizerName,
+          };
+          const val = sysMap[key];
+          return val !== undefined && val !== null ? String(val) : undefined;
+        };
+
+        baseFields = linked.fields.map((f) => {
+          const sysVal = getSystemVal(f.key);
+          let customVal: string | undefined = undefined;
+          if (f.section === 'custom' || f.section === 'policies') {
+            const cf = (event.customFields ?? []).find((c) => c.key === f.key);
+            if (cf && cf.value !== undefined && cf.value !== null) {
+              customVal = String(cf.value);
+            }
+          }
+          const finalVal = sysVal !== undefined ? sysVal : customVal;
+          return {
+            ...f,
+            defaultValue: finalVal !== undefined ? finalVal : (f.defaultValue ?? ''),
+          };
+        });
+
+        baseLayout = linked.layout;
+        baseSessionTemplates = linked.sessionTemplates;
+      }
+    }
+
+    const tpl = await EventTemplate.create({
+      name:             templateName,
+      description:      event.shortDescription || event.description?.slice(0, 200) || '',
+      eventType:        event.eventType,
+      format:           event.format,
+      isFree:           event.isFree,
+      isDefault:        false,
+      isSystemTemplate: false,
+      createdBy:        event.createdBy,
+      organization:     event.organization,
+      fields:           baseFields,
+      layout:           baseLayout,
+      defaultVisibility: event.visibility || 'public',
+      defaultStatus:     'draft',
+      defaultPolicies:   event.policies ?? {},
+      sessionTemplates:  baseSessionTemplates,
+      coverColor:        '#3B82F6',
+      tags:              [],
+    });
+
+    res.status(201).json({ success: true, data: tpl });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Server error';
     res.status(500).json({ success: false, message });

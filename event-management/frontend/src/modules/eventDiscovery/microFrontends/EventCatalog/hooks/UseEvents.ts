@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { eventApi, type ApiEvent } from '@/services/api';
 import { format } from 'date-fns';
 
@@ -89,7 +90,6 @@ export const useEvents = () => {
   const [events, setEvents]       = useState<CatalogEvent[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
-  const [searchQuery, setSearchQuery]   = useState('');
   const [filterType, setFilterType]     = useState<'All' | 'Free' | 'Paid'>('All');
   const [category, setCategory]         = useState('All');
   /** '' | physical | virtual | hybrid */
@@ -103,6 +103,19 @@ export const useEvents = () => {
   const [currentPage, setCurrentPage]   = useState(1);
   const [totalPages, setTotalPages]     = useState(1);
 
+  const location = useLocation();
+  const [globalSearch, setGlobalSearch] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const searchParam = params.get('search');
+    if (searchParam !== null) {
+      setGlobalSearch(searchParam);
+    } else {
+      setGlobalSearch('');
+    }
+  }, [location.search]);
+
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -113,7 +126,9 @@ export const useEvents = () => {
         status: 'published',
         visibility: 'public',
       };
-      if (searchQuery.trim())        params['search']     = searchQuery.trim();
+      
+      const activeSearch = globalSearch.trim();
+      if (activeSearch)        params['search']     = activeSearch;
       if (filterType === 'Free')     params['isFree']     = 'true';
       if (filterType === 'Paid')     params['isFree']     = 'false';
       if (category !== 'All')       params['category']   = category;
@@ -139,21 +154,21 @@ export const useEvents = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, tagFilter, currentPage]);
+  }, [globalSearch, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, tagFilter, currentPage]);
 
   useEffect(() => {
-    const timer = setTimeout(fetchEvents, searchQuery ? 400 : 0);
+    const timer = setTimeout(fetchEvents, globalSearch ? 400 : 0);
     return () => clearTimeout(timer);
-  }, [fetchEvents]);
+  }, [fetchEvents, globalSearch]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, tagFilter]);
+  }, [globalSearch, filterType, category, formatFilter, startDateFrom, startDateTo, suitableForAge, tagFilter]);
 
   return {
     events, loading, error,
-    searchQuery, setSearchQuery,
+    searchQuery: globalSearch,
     filterType, setFilterType,
     category, setCategory,
     formatFilter, setFormatFilter,
