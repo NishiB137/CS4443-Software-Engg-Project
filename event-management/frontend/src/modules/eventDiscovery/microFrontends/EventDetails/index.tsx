@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useEventDetails } from '@/modules/eventDiscovery/microFrontends/EventDetails/hooks/useEventDetails';
 import { SupportTicketModal } from '@/modules/eventDiscovery/microFrontends/EventDetails/components/SupportTicketModal';
+import { RegistrationModal } from '@/modules/eventDiscovery/microFrontends/EventDetails/components/RegistrationModal';
+import { LoginRequiredModal } from '@/shared/components/LoginRequiredModal';
 import { format } from 'date-fns';
 
 // ─── Skeleton loader ──────────────────────────────────────────────────────────
@@ -68,7 +70,8 @@ export const EventDetailsMFE: React.FC = () => {
     event, loading, error,
     isTicketModalOpen, setIsTicketModalOpen,
     isLiked, toggleLike, likeBusy,
-    isBookmarked, setIsBookmarked,
+    isBookmarked, toggleBookmark, bookmarkBusy,
+    isRegistered, handleRegistered,
     selectedTicketId, setSelectedTicketId,
     comments, handleAddComment,
   } = useEventDetails();
@@ -77,6 +80,21 @@ export const EventDetailsMFE: React.FC = () => {
   const [commentInput, setCommentInput]       = useState('');
   const [activeTab, setActiveTab]             = useState<'details' | 'agenda' | 'venue' | 'policies'>('details');
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [isRegModalOpen, setIsRegModalOpen]   = useState(false);
+  const [pendingAction, setPendingAction]     = useState<(() => void) | null>(null);
+
+  const requireLogin = (action: () => void) => {
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+      action();
+    } else {
+      setPendingAction(() => action);
+    }
+  };
+
+  const handleLoginSuccess = () => {
+    setPendingAction(null);
+    if (pendingAction) pendingAction();
+  };
 
   // Auto-play slideshow
   useEffect(() => {
@@ -90,10 +108,24 @@ export const EventDetailsMFE: React.FC = () => {
   if (loading) return <Skeleton />;
   if (error || !event) return <ErrorState message={error ?? 'Event could not be loaded.'} />;
 
+  const now = new Date();
+  const startStr = event._raw.startDate;
+  const start = startStr ? new Date(startStr) : null;
+  const endStr = event._raw.endDate;
+  const end = endStr ? new Date(endStr) : null;
+  let statusBadge = { label: 'Upcoming', color: 'bg-purple-500/90 text-white' };
+  if (end && now > end) {
+    statusBadge = { label: 'Completed', color: 'bg-gray-600/90 text-white' };
+  } else if (start && now >= start && (!end || now <= end)) {
+    statusBadge = { label: 'Ongoing', color: 'bg-blue-500/90 text-white' };
+  }
+
   const submitComment = (e: React.FormEvent) => {
     e.preventDefault();
-    handleAddComment(commentInput);
-    setCommentInput('');
+    requireLogin(() => {
+      handleAddComment(commentInput);
+      setCommentInput('');
+    });
   };
 
   const handleShare = () => {
@@ -103,10 +135,32 @@ export const EventDetailsMFE: React.FC = () => {
 
   return (
     <div className="bg-background min-h-screen pb-20">
+      <LoginRequiredModal
+        isOpen={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        onSuccess={handleLoginSuccess}
+        message="Please sign in to continue."
+      />
       <SupportTicketModal
         isOpen={isTicketModalOpen}
         onClose={() => setIsTicketModalOpen(false)}
         organizerName={event.organizer.name}
+        eventId={event.id}
+      />
+
+      <RegistrationModal
+        isOpen={isRegModalOpen}
+        onClose={() => setIsRegModalOpen(false)}
+        eventId={event.id}
+        registrationFields={event._raw.registrationFields ?? []}
+        ticketTier={selectedTicketId
+          ? event.tickets.find(t => t.id === selectedTicketId)?.type
+          : undefined}
+        ticketPrice={selectedTicketId
+          ? event.tickets.find(t => t.id === selectedTicketId)?.price
+          : undefined}
+        isFree={event.isFree}
+        onSuccess={(email) => { handleRegistered(email, event.id); setIsRegModalOpen(false); }}
       />
 
       {/* ── Hero Slideshow ── */}
@@ -188,8 +242,10 @@ export const EventDetailsMFE: React.FC = () => {
             </svg>
           </button>
           <button
-            onClick={() => setIsBookmarked(!isBookmarked)}
-            className="bg-white/20 backdrop-blur-md p-3 rounded-full hover:bg-white/40 transition"
+            disabled={bookmarkBusy}
+            onClick={() => void toggleBookmark()}
+            title={isBookmarked ? 'Remove bookmark' : 'Bookmark this event'}
+            className="bg-white/20 backdrop-blur-md p-3 rounded-full hover:bg-white/40 transition disabled:opacity-60"
           >
             <svg className={`w-6 h-6 ${isBookmarked ? 'fill-primary text-primary' : 'text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -209,6 +265,9 @@ export const EventDetailsMFE: React.FC = () => {
         <div className="absolute bottom-0 left-0 w-full p-8 z-10">
           <div className="max-w-7xl mx-auto text-white">
             <div className="flex flex-wrap gap-2 mb-3">
+              <span className={`text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm ${statusBadge.color}`}>
+                {statusBadge.label}
+              </span>
               {event.tags.map(tag => (
                 <span key={tag} className="text-xs font-bold px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 capitalize shadow-sm">
                   {tag}
@@ -242,10 +301,13 @@ export const EventDetailsMFE: React.FC = () => {
             )}
 
             <p className="text-base font-medium opacity-90 flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
-                {event.dateInfo}
-              </span>
+              <div className="inline-flex items-start gap-1.5 flex-col md:flex-row">
+                <div className="inline-flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                  {event.dateInfo}
+                </div>
+                {event.dateInfoLocal && <span className="opacity-70 text-sm font-normal mt-0.5 md:ml-1 md:mt-0">(Viewer Local: {event.dateInfoLocal})</span>}
+              </div>
               <span className="inline-flex items-center gap-1.5">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
                 {event.locationInfo}
@@ -576,7 +638,7 @@ export const EventDetailsMFE: React.FC = () => {
 
           {/* Ticket Selection */}
           {(event.tickets.length > 0 || !event.isFree) && (
-            <section className="bg-surface p-8 rounded-2xl shadow-sm border border-border" id="tickets">
+            <section className="bg-surface p-8 rounded-2xl shadow-sm border border-border" id="tickets-section">
               <h2 className="text-2xl font-bold text-text-primary mb-6">
                 {event.isFree ? 'Register for Free' : 'Select Your Ticket'}
               </h2>
@@ -633,26 +695,36 @@ export const EventDetailsMFE: React.FC = () => {
               )}
 
               <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-                <p className="text-text-secondary text-sm">
-                  {event.isFree
-                    ? 'Click Register to confirm your free spot.'
-                    : selectedTicketId
-                      ? 'Ticket selected. Proceed to secure checkout.'
-                      : 'Please select a ticket type to continue.'}
-                </p>
+                {isRegistered ? (
+                  <div className="flex items-center gap-2 text-green-600 font-semibold text-sm">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
+                    You're registered!
+                  </div>
+                ) : (
+                  <p className="text-text-secondary text-sm">
+                    {event.isFree
+                      ? 'Click Register to confirm your free spot.'
+                      : selectedTicketId
+                        ? 'Ticket selected. Proceed to register.'
+                        : 'Please select a ticket type to continue.'}
+                  </p>
+                )}
                 <button
-                  disabled={!event.isFree && !selectedTicketId}
+                  disabled={(!event.isFree && !selectedTicketId) || isRegistered}
+                  onClick={() => requireLogin(() => setIsRegModalOpen(true))}
                   className={`px-10 py-4 rounded-full font-bold shadow-lg transition-all ${
-                    event.isFree || selectedTicketId
-                      ? 'bg-primary text-white hover:bg-primary-hover hover:scale-105'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    isRegistered
+                      ? 'bg-green-600 text-white cursor-default'
+                      : event.isFree || selectedTicketId
+                        ? 'bg-primary text-white hover:bg-primary-hover hover:scale-105'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  {event.isFree ? 'Register for Free' : 'Proceed to Register'}
-                  </button>
-                </div>
-              </section>
-            )}
+                  {isRegistered ? '✓ Registered' : event.isFree ? 'Register for Free' : 'Proceed to Register'}
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* ── FAQs ── always shown ── */}
           <section className="bg-surface p-8 rounded-2xl shadow-sm border border-border">
@@ -763,12 +835,28 @@ export const EventDetailsMFE: React.FC = () => {
 
             {/* Register button */}
             <button
+              disabled={isRegistered}
               onClick={() => {
-                document.getElementById('tickets')?.scrollIntoView({ behavior: 'smooth' });
+                if (!event.isFree && !selectedTicketId) {
+                  const section = document.getElementById('tickets-section');
+                  if (section) {
+                    section.scrollIntoView({ behavior: 'smooth' });
+                    section.classList.add('ring-2', 'ring-red-500', 'transition-all');
+                    setTimeout(() => section.classList.remove('ring-2', 'ring-red-500'), 2000);
+                  } else {
+                    alert('Please select a ticket tier first.');
+                  }
+                  return;
+                }
+                requireLogin(() => setIsRegModalOpen(true));
               }}
-              className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3.5 rounded-xl transition shadow-md text-base"
+              className={`w-full font-bold py-3.5 rounded-xl transition shadow-md text-base ${
+                isRegistered
+                  ? 'bg-green-600 text-white cursor-default'
+                  : 'bg-primary hover:bg-primary-hover text-white'
+              }`}
             >
-              {event.isFree ? 'Register for Free' : 'Register / Get Tickets'}
+              {isRegistered ? '✓ You are Registered' : event.isFree ? 'Register for Free' : 'Register / Get Tickets'}
             </button>
 
             {event.isFree && (
@@ -829,7 +917,7 @@ export const EventDetailsMFE: React.FC = () => {
             <h4 className="font-bold text-lg text-text-primary mb-1">{event.organizer.name}</h4>
             <p className="text-sm text-text-secondary mb-4">{event.organizer.followers} Registered</p>
             <button
-              onClick={() => setIsTicketModalOpen(true)}
+              onClick={() => requireLogin(() => setIsTicketModalOpen(true))}
               className="w-full bg-secondary text-white font-semibold py-2.5 rounded-lg hover:bg-secondary-hover transition"
             >
               Contact Organizer / Support
