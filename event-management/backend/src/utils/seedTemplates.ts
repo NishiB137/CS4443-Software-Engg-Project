@@ -44,6 +44,56 @@ const onlineLinkField = (order = 25): IFieldSpec => ({
   defaultValue: 'Link will be shared soon', section: 'venue', order, helpText: 'Required for virtual and hybrid events',
 });
 
+const coreMediaFields = (order = 45): IFieldSpec[] => [
+  { key: 'coverImage', label: 'Event Cover Image', fieldType: 'file_image', required: false, section: 'media', order: order + 0, helpText: 'Recommended size: 1200x600px', form: 'Basic Info', category: 'Media' },
+  { key: 'secondaryImages', label: 'Secondary Images', fieldType: 'file_image_multiple', required: false, section: 'media', order: order + 1, helpText: 'Upload up to 5 additional images', form: 'Basic Info', category: 'Media' },
+  { key: 'videoUrl', label: 'Promotional Video', fieldType: 'file_video', required: false, section: 'media', order: order + 2, form: 'Basic Info', category: 'Media' },
+];
+
+const coreRegistrationFields = (order = 60): IFieldSpec[] => [
+  { key: 'attendeeName', label: 'Full Name', fieldType: 'text', required: true, section: 'custom', order: order + 0, form: 'Registration', category: 'Contact Info', formOrder: 2, categoryOrder: 0 },
+  { key: 'attendeeEmail', label: 'Email Address', fieldType: 'email', required: true, section: 'custom', order: order + 1, form: 'Registration', category: 'Contact Info', formOrder: 2, categoryOrder: 0 },
+  { key: 'attendeePhone', label: 'Phone Number', fieldType: 'phone', required: false, section: 'custom', order: order + 2, form: 'Registration', category: 'Contact Info', formOrder: 2, categoryOrder: 0 },
+];
+
+const professionalRegistrationFields = (order = 60): IFieldSpec[] => [
+  ...coreRegistrationFields(order),
+  { key: 'organization', label: 'Organization/Company', fieldType: 'text', required: false, section: 'custom', order: order + 3, form: 'Registration', category: 'Additional Info', formOrder: 2, categoryOrder: 1 },
+  { key: 'designation', label: 'Job Title / Designation', fieldType: 'text', required: false, section: 'custom', order: order + 4, form: 'Registration', category: 'Additional Info', formOrder: 2, categoryOrder: 1 },
+];
+
+const DEFAULT_EVENT_LAYOUT = {
+  forms: [
+    {
+      name: 'Basic Info',
+      order: 0,
+      categories: [
+        { name: 'Event Details', order: 0 },
+        { name: 'Date & Time', order: 1 },
+        { name: 'Venue', order: 2 },
+        { name: 'Capacity', order: 3 },
+        { name: 'Media', order: 4 }
+      ]
+    },
+    {
+      name: 'About this event',
+      order: 1,
+      categories: [
+        { name: 'Policies', order: 0 },
+        { name: 'Custom', order: 1 }
+      ]
+    },
+    {
+      name: 'Registration',
+      order: 2,
+      categories: [
+        { name: 'Contact Info', order: 0 },
+        { name: 'Additional Info', order: 1 }
+      ]
+    }
+  ]
+};
+
 // ─── Session templates ────────────────────────────────────────────────────────
 
 const DEFAULT_SESSION_LAYOUT = {
@@ -150,6 +200,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: true,
     maxSubEventDepth: 2,
     defaultPolicies: { refundPolicy: 'partial', attendeeMinAge: 0 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -158,6 +209,7 @@ const SEED_TEMPLATES = [
       ...policyFields(40),
       { key: 'organizerName', label: 'Organizer Name', fieldType: 'text', required: false, section: 'basics', order: 6, maxLength: 150 } as IFieldSpec,
       { key: 'pocEmail',      label: 'Point of Contact Email', fieldType: 'email', required: false, section: 'basics', order: 7 } as IFieldSpec,
+      ...professionalRegistrationFields(60),
     ],
     sessionTemplates: [keynoteSessionTemplate(), panelSessionTemplate(), workshopSessionTemplate(), networkingSessionTemplate()],
   },
@@ -177,6 +229,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: false,
     maxSubEventDepth: 1,
     defaultPolicies: { refundPolicy: 'full', attendeeMinAge: 0 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -184,6 +237,7 @@ const SEED_TEMPLATES = [
       capacityField(30),
       ...policyFields(40),
       { key: 'prerequisites', label: 'Prerequisites', fieldType: 'textarea', required: false, placeholder: 'What attendees should know/bring', section: 'custom', order: 50, maxLength: 1000 } as IFieldSpec,
+      ...professionalRegistrationFields(60),
     ],
     sessionTemplates: [workshopSessionTemplate(), networkingSessionTemplate()],
   },
@@ -203,13 +257,16 @@ const SEED_TEMPLATES = [
     allowsSubEvents: false,
     maxSubEventDepth: 1,
     defaultPolicies: { refundPolicy: 'full', attendeeMinAge: 0 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
       onlineLinkField(20),
       capacityField(30),
+      ...coreMediaFields(45),
       ...policyFields(40),
       { key: 'streamPlatform', label: 'Streaming Platform', fieldType: 'select', required: false, section: 'custom', order: 50, options: ['Zoom','Google Meet','YouTube Live','Microsoft Teams','Custom'] } as IFieldSpec,
+      ...coreRegistrationFields(60),
     ],
     sessionTemplates: [keynoteSessionTemplate(), panelSessionTemplate()],
   },
@@ -229,6 +286,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: true,
     maxSubEventDepth: 2,
     defaultPolicies: { refundPolicy: 'no_refund', attendeeMinAge: 16 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -240,6 +298,7 @@ const SEED_TEMPLATES = [
       { key: 'teamSizeMax', label: 'Max Team Size',   fieldType: 'number', required: false, defaultValue: '4', min: 1, max: 20, section: 'custom', order: 51 } as IFieldSpec,
       { key: 'prizePool',   label: 'Prize Pool (₹)', fieldType: 'number', required: false, min: 0, section: 'custom', order: 52 } as IFieldSpec,
       { key: 'theme',       label: 'Hackathon Theme',fieldType: 'text',   required: false, maxLength: 200, section: 'custom', order: 53 } as IFieldSpec,
+      ...professionalRegistrationFields(60),
     ],
     sessionTemplates: [
       { title: 'Opening Ceremony', sessionType: 'keynote', defaultDurationMinutes: 30, description: 'Welcome and problem statement reveal', defaultFields: [] },
@@ -264,6 +323,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: false,
     maxSubEventDepth: 1,
     defaultPolicies: { refundPolicy: 'no_refund', attendeeMinAge: 0 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -272,6 +332,7 @@ const SEED_TEMPLATES = [
       ...policyFields(40),
       { key: 'artists',    label: 'Artists / Performers', fieldType: 'textarea', required: false, placeholder: 'List of performers', section: 'custom', order: 50, maxLength: 500 } as IFieldSpec,
       { key: 'ageRating',  label: 'Age Rating',           fieldType: 'select',   required: false, section: 'custom', order: 51, options: ['All ages','13+','16+','18+'] } as IFieldSpec,
+      ...coreRegistrationFields(60),
     ],
     sessionTemplates: [
       { title: 'Opening Act',      sessionType: 'performance', defaultDurationMinutes: 30, description: 'Support act before main performance', defaultFields: [] },
@@ -295,6 +356,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: true,
     maxSubEventDepth: 2,
     defaultPolicies: { refundPolicy: 'partial', attendeeMinAge: 18 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -305,6 +367,7 @@ const SEED_TEMPLATES = [
       { key: 'companyName',   label: 'Hosting Company', fieldType: 'text',   required: false, maxLength: 200, section: 'basics', order: 7 } as IFieldSpec,
       { key: 'dressCode',     label: 'Dress Code',      fieldType: 'select', required: false, section: 'custom', order: 50, options: ['Business Formal','Business Casual','Smart Casual','Casual'] } as IFieldSpec,
       { key: 'cateringNotes', label: 'Catering / Dietary Notes', fieldType: 'textarea', required: false, maxLength: 500, section: 'custom', order: 51 } as IFieldSpec,
+      ...professionalRegistrationFields(60),
     ],
     sessionTemplates: [keynoteSessionTemplate(), panelSessionTemplate(), workshopSessionTemplate(), networkingSessionTemplate()],
   },
@@ -324,6 +387,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: true,
     maxSubEventDepth: 2,
     defaultPolicies: { refundPolicy: 'no_refund', attendeeMinAge: 0 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -332,6 +396,7 @@ const SEED_TEMPLATES = [
       ...policyFields(40),
       { key: 'boothInfo', label: 'Booth / Stall Info', fieldType: 'textarea', required: false, placeholder: 'Booth timings, vendor rules, etc.', section: 'custom', order: 50, maxLength: 1500 } as IFieldSpec,
       { key: 'entryRules', label: 'Entry Rules', fieldType: 'textarea', required: false, section: 'custom', order: 51, maxLength: 1500 } as IFieldSpec,
+      ...professionalRegistrationFields(60),
     ],
     sessionTemplates: [
       { title: 'Opening Ceremony', sessionType: 'keynote', defaultDurationMinutes: 30, description: 'Welcome note', defaultFields: [] },
@@ -355,6 +420,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: true,
     maxSubEventDepth: 2,
     defaultPolicies: { refundPolicy: 'no_refund', attendeeMinAge: 0 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -363,6 +429,7 @@ const SEED_TEMPLATES = [
       ...policyFields(40),
       { key: 'lineup', label: 'Lineup / Program', fieldType: 'textarea', required: false, placeholder: 'Artists, segments, timings', section: 'custom', order: 50, maxLength: 2000 } as IFieldSpec,
       { key: 'parkingInfo', label: 'Parking / Transport Info', fieldType: 'textarea', required: false, section: 'custom', order: 51, maxLength: 1000 } as IFieldSpec,
+      ...coreRegistrationFields(60),
     ],
     sessionTemplates: [
       { title: 'Gates Open', sessionType: 'other', defaultDurationMinutes: 30, description: 'Entry opens', defaultFields: [] },
@@ -387,6 +454,7 @@ const SEED_TEMPLATES = [
     allowsSubEvents: false,
     maxSubEventDepth: 1,
     defaultPolicies: { refundPolicy: 'no_refund', attendeeMinAge: 0 },
+    layout: DEFAULT_EVENT_LAYOUT,
     fields: [
       ...coreBasicsFields(0),
       ...coreDateFields(10),
@@ -396,6 +464,7 @@ const SEED_TEMPLATES = [
       ...policyFields(40),
       { key: 'rules', label: 'Rules', fieldType: 'textarea', required: true, placeholder: 'Competition rules and scoring', section: 'custom', order: 50, maxLength: 3000 } as IFieldSpec,
       { key: 'prizes', label: 'Prizes', fieldType: 'textarea', required: false, placeholder: 'Prizes and awards', section: 'custom', order: 51, maxLength: 1500 } as IFieldSpec,
+      ...coreRegistrationFields(60),
     ],
     sessionTemplates: [
       competitionRoundTemplate(),

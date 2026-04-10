@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { eventApi, bookmarkApi } from '../../services/api';
 
 export interface EventCardProps {
   id: string;
@@ -13,11 +14,63 @@ export interface EventCardProps {
 }
 
 export const EventCard: React.FC<EventCardProps> = ({ 
-  title, date, location, price, images, category, organization, isTrending
+  id, title, date, location, price, images, category, organization, isTrending
 }) => {
-  const [isLiked, setIsLiked] = useState(false);
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isLiked, setIsLiked] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('likedEvents') || '[]').includes(id);
+    } catch { return false; }
+  });
+  const [isBookmarked, setIsBookmarked] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('bookmarkedEvents') || '[]').includes(id);
+    } catch { return false; }
+  });
   const [currentImg, setCurrentImg] = useState(0);
+
+  const handleLike = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const newLiked = !isLiked;
+    setIsLiked(newLiked);
+    
+    try {
+      const likedEvents = JSON.parse(localStorage.getItem('likedEvents') || '[]');
+      if (newLiked) {
+        if (!likedEvents.includes(id)) {
+          localStorage.setItem('likedEvents', JSON.stringify([...likedEvents, id]));
+          await eventApi.like(id).catch(() => {});
+        }
+      } else {
+        const filtered = likedEvents.filter((eId: string) => eId !== id);
+        localStorage.setItem('likedEvents', JSON.stringify(filtered));
+        await eventApi.unlike(id).catch(() => {});
+      }
+    } catch {}
+  };
+
+  const handleBookmark = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const newBookmarked = !isBookmarked;
+    setIsBookmarked(newBookmarked);
+    
+    try {
+      const bookmarkedEvents = JSON.parse(localStorage.getItem('bookmarkedEvents') || '[]');
+      if (newBookmarked) {
+        if (!bookmarkedEvents.includes(id)) {
+          localStorage.setItem('bookmarkedEvents', JSON.stringify([...bookmarkedEvents, id]));
+        }
+      } else {
+        const filtered = bookmarkedEvents.filter((eId: string) => eId !== id);
+        localStorage.setItem('bookmarkedEvents', JSON.stringify(filtered));
+      }
+      
+      await bookmarkApi.toggle(id).catch(() => {});
+    } catch {}
+  };
 
   const nextImg = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -76,13 +129,13 @@ export const EventCard: React.FC<EventCardProps> = ({
         {/* Action Buttons (Like & Bookmark) */}
         <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
           <button 
-            onClick={() => setIsLiked(!isLiked)}
+            onClick={handleLike}
             className="bg-white p-2 rounded-full shadow-lg text-gray-400 hover:text-red-500 transition-colors"
           >
             <svg className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
           </button>
           <button 
-            onClick={() => setIsBookmarked(!isBookmarked)}
+            onClick={handleBookmark}
             className="bg-white p-2 rounded-full shadow-lg text-gray-400 hover:text-primary transition-colors"
           >
             <svg className={`w-5 h-5 ${isBookmarked ? 'fill-primary text-primary' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
