@@ -111,6 +111,12 @@ const validateCreateBody = (body: CreateEventBody): void => {
   if (!body.format || !validFormats.includes(body.format))
     errors.push(`Format must be one of: ${validFormats.join(', ')}.`);
 
+  // ── Event Type ──
+  const eventTypeVal = asString(body.eventType).trim();
+  if (!eventTypeVal)
+    errors.push('Event type is required and cannot be empty.');
+
+
   // ── Venue field lengths ──
   const venueTextFields = ['name', 'address', 'city', 'state', 'country'] as const;
   for (const f of venueTextFields) {
@@ -247,12 +253,24 @@ export const createEvent = async (body: CreateEventBody) => {
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
+const calculateDynamicStatus = (event: any) => {
+  if (event.status === 'published' && event.startDate && event.endDate) {
+    const now = new Date();
+    const start = new Date(event.startDate);
+    const end = new Date(event.endDate);
+    if (now > end) return 'completed';
+    if (now >= start && now <= end) return 'ongoing';
+  }
+  return event.status;
+};
+
 export const getEventById = async (id: string) => {
   const event = await Event.findById(id)
     .populate('tags',         'name slug')
     .populate('organization', 'name slug logo')
     .populate('createdBy',    'name email avatar')
     .lean();
+  if (event) event.status = calculateDynamicStatus(event);
   return attachSessions(event as Record<string, unknown> | null);
 };
 
@@ -262,6 +280,7 @@ export const getEventBySlug = async (slug: string) => {
     .populate('organization', 'name slug logo')
     .populate('createdBy',    'name email avatar')
     .lean();
+  if (event) event.status = calculateDynamicStatus(event);
   return attachSessions(event as Record<string, unknown> | null);
 };
 
@@ -298,12 +317,25 @@ export const listEvents = async (filters: {
   const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)));
 
   const query: Record<string, unknown> = {};
+  const andClauses: any[] = [];
+
   if (status)       query['status']       = status;
   if (visibility && visibility !== 'all') query['visibility'] = visibility;
   if (isFree !== undefined) query['isFree'] = isFree;
   if (organization) query['organization'] = organization;
   if (createdBy)    query['createdBy']    = createdBy;
-  if (search)       query['$text']        = { $search: search };
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    andClauses.push({
+      $or: [
+        { title: regex },
+        { shortDescription: regex },
+        { description: regex },
+        { organizerName: regex },
+        { eventType: regex },
+      ]
+    });
+  }
   if (format)       query['format']       = format;
   if (tag) {
     const tagDoc = await Tag.findOne({ slug: generateSlug(tag) }).select('_id').lean();
@@ -331,11 +363,17 @@ export const listEvents = async (filters: {
 
   if (suitableForAge !== undefined && Number.isFinite(suitableForAge)) {
     const age = Math.min(120, Math.max(0, Math.floor(Number(suitableForAge))));
-    query['$or'] = [
-      { 'policies.attendeeMinAge': { $lte: age } },
-      { 'policies.attendeeMinAge': { $exists: false } },
-      { 'policies.attendeeMinAge': null },
-    ];
+    andClauses.push({
+      $or: [
+        { 'policies.attendeeMinAge': { $lte: age } },
+        { 'policies.attendeeMinAge': { $exists: false } },
+        { 'policies.attendeeMinAge': null },
+      ]
+    });
+  }
+
+  if (andClauses.length > 0) {
+    query['$and'] = andClauses;
   }
 
   const skip = (safePage - 1) * safeLimit;
@@ -346,12 +384,15 @@ export const listEvents = async (filters: {
       .populate('organization', 'name slug logo')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(safeLimit),
+      .limit(safeLimit)
+      .lean(),
     Event.countDocuments(query),
   ]);
 
+  const updatedEvents = events.map(e => ({ ...e, status: calculateDynamicStatus(e) }));
+
   return {
-    events,
+    events: updatedEvents,
     pagination: { total, page: safePage, limit: safeLimit, totalPages: Math.ceil(total / safeLimit) },
   };
 };
@@ -361,6 +402,15 @@ export const incrementEventLikes = async (id: string) => {
   return Event.findByIdAndUpdate(
     id,
     { $inc: { 'analytics.likes': 1 } },
+    { new: true },
+  ).select('analytics');
+};
+
+/** Decrement like counter */
+export const decrementEventLikes = async (id: string) => {
+  return Event.findByIdAndUpdate(
+    id,
+    { $inc: { 'analytics.likes': -1 } },
     { new: true },
   ).select('analytics');
 };
@@ -403,6 +453,13 @@ export const updateEvent = async (id: string, body: UpdateEventBody, changedBy: 
     if (!Number.isInteger(cap) || cap < LIMITS.maxCapacity.min) errors.push(`Capacity must be a whole number ≥ ${LIMITS.maxCapacity.min}.`);
     else if (cap > LIMITS.maxCapacity.max) errors.push(`Capacity cannot exceed ${LIMITS.maxCapacity.max.toLocaleString()}.`);
   }
+
+  // ── Event Type ──
+  if (body.eventType !== undefined) {
+    const etVal = String(body.eventType ?? '').trim();
+    if (!etVal) errors.push('Event type cannot be empty.');
+  }
+
 
   if (body.startDate && body.endDate) {
     const s = parseDate(body.startDate);
@@ -484,15 +541,43 @@ export const changeEventStatus = async (id: string, newStatus: string, changedBy
   const event = await Event.findById(id);
   if (!event) return null;
 
-  return Event.findByIdAndUpdate(
+  if (newStatus === 'published') {
+    // Validate strictly for publishing: convert Date fields to ISO strings for the validator
+    const objToValidate = event.toObject() as any;
+
+    // Ensure startDate / endDate are ISO strings, not Date objects
+    if (objToValidate.startDate instanceof Date) {
+      objToValidate.startDate = objToValidate.startDate.toISOString();
+    }
+    if (objToValidate.endDate instanceof Date) {
+      objToValidate.endDate = objToValidate.endDate.toISOString();
+    }
+
+    const bodyToValidate = {
+      ...objToValidate,
+      status: 'published',
+    };
+
+    try {
+      validateCreateBody(bodyToValidate as any);
+    } catch (e: any) {
+      throw new Error(`Cannot publish: ${e.message}`);
+    }
+  }
+
+  const updated = await Event.findByIdAndUpdate(
     id,
     {
       status: newStatus,
       $push: { changeLog: { changedBy, changedAt: new Date(), field: 'status', oldValue: event.status, newValue: newStatus, description: `Status changed from ${event.status} to ${newStatus}` } },
     },
     { new: true }
-  );
+  ).lean();
+  
+  if (updated) updated.status = calculateDynamicStatus(updated);
+  return updated;
 };
+
 
 // ─── Delete (with cascade to sessions) ───────────────────────────────────────
 

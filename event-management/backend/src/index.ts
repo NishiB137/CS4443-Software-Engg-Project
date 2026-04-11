@@ -6,6 +6,9 @@ import eventRoutes    from './routes/eventRoutes.js';
 import sessionRoutes  from './routes/sessionRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
 import uploadRoutes   from './routes/uploadRoutes.js';
+import bookmarkRoutes from './routes/bookmarkRoutes.js';
+import supportTicketRoutes from './routes/supportTicketRoutes.js';
+import * as registrationController from './controllers/registrationController.js';
 
 // ─── Model imports ─────────────────────────────────────────────────────────────
 import './models/User.js';
@@ -16,6 +19,8 @@ import './models/Session.js';
 import './models/Tag.js';
 import './models/Registration.js';
 import './models/Comment.js';
+import './models/UserEventInteraction.js';
+import './models/SupportTicket.js';
 
 import { seedDefaultTemplates } from './utils/seedTemplates.js';
 import { ensureDevBootstrap } from './utils/ensureDevBootstrap.js';
@@ -48,6 +53,9 @@ app.use('/api/events',       eventRoutes);
 app.use('/api/sessions',     sessionRoutes);
 app.use('/api/templates',    templateRoutes);
 app.use('/api/upload',       uploadRoutes);
+app.use('/api/bookmarks',    bookmarkRoutes);
+app.use('/api/support-tickets', supportTicketRoutes);
+app.get('/api/user/registrations', registrationController.getMyRegistrations);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => {

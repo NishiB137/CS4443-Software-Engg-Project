@@ -3,10 +3,9 @@ import type { IFieldSpec, ISessionTemplate } from '../models/EventTemplate.js';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-const VALID_FIELD_TYPES = ['text','textarea','number','date','time','datetime','select','multiselect','toggle','url','email','phone'];
+const VALID_FIELD_TYPES = ['text','textarea','number','date','time','datetime','select','multiselect','toggle','url','email','phone', 'file_image', 'file_video', 'file_image_multiple', 'speakers'];
 const VALID_SECTIONS    = ['basics','datetime','venue','capacity','policies','media','custom'];
 const VALID_FORMATS     = ['physical','virtual','hybrid'];
-const VALID_EVENT_TYPES = ['conference','workshop','hackathon','concert','exhibition','summit','festival','competition','webinar','other'];
 
 const validateField = (f: Partial<IFieldSpec>, idx: number): string[] => {
   const e: string[] = [];
@@ -64,7 +63,6 @@ const validateBody = (body: TemplateBody, isCreate = true): void => {
   if (body.name && body.name.trim().length > 100) errors.push('Template name cannot exceed 100 characters.');
   if (body.description && body.description.length > 500) errors.push('Description cannot exceed 500 characters.');
   if (body.format && !VALID_FORMATS.includes(body.format)) errors.push(`Format must be one of: ${VALID_FORMATS.join(', ')}.`);
-  if (body.eventType && !VALID_EVENT_TYPES.includes(body.eventType)) errors.push(`Invalid event type.`);
 
   if (body.fields) {
     const keys = new Set<string>();

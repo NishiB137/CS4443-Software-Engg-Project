@@ -57,6 +57,8 @@ export interface ApiEvent {
   secondaryImages?: string[];
   media?: { videoUrl?: string; logo?: string };
   organizerName?: string;
+  notes?: string;
+  pocDetails?: { name?: string; email?: string; phone?: string };
   organization: { _id: string; name: string; slug: string; logo?: string } | string;
   createdBy: { _id: string; name: string; email: string } | string;
   tags?: Array<{ _id: string; name: string; slug: string }>;
@@ -65,6 +67,17 @@ export interface ApiEvent {
   faqs?: Array<{ question: string; answer: string }>;
   /** Present on GET /events/:id and /slug/:slug when sessions are embedded */
   sessions?: unknown[];
+  customEventType?: string;
+  customFields?: Array<{ key: string; label: string; value: unknown }>;
+  registrationFields?: Array<{
+    key: string;
+    label: string;
+    fieldType: 'text' | 'email' | 'phone' | 'textarea' | 'select';
+    required: boolean;
+    options?: string[];
+    category?: string;
+  }>;
+  templateId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -196,6 +209,9 @@ export const eventApi = {
   /** Increment server-side like counter (idempotent per browser via localStorage in UI) */
   like: (id: string) =>
     request<{ success: boolean; likes: number }>(`/events/${id}/like`, { method: 'POST' }),
+
+  unlike: (id: string) =>
+    request<{ success: boolean; likes: number }>(`/events/${id}/unlike`, { method: 'POST' }),
 
   /** Increment server-side view counter (idempotent per browser via localStorage in UI) */
   addView: (id: string) =>
@@ -351,3 +367,112 @@ export const uploadApi = {
     return json.url;
   },
 };
+
+// ─── Registration types ───────────────────────────────────────────────────────
+
+export interface ApiRegistration {
+  _id: string;
+  eventId: string;
+  userId: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  attendeePhone?: string;
+  ticketTier: string;
+  amountPaid: number;
+  paymentStatus: string;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  formResponses: Record<string, unknown>;
+  registrationDate: string;
+  createdAt: string;
+}
+
+export interface RegisterPayload {
+  attendeeName:  string;
+  attendeeEmail: string;
+  attendeePhone?: string;
+  ticketTier?:   string;
+  formResponses?: Record<string, unknown>;
+}
+
+// ─── Registration API calls ───────────────────────────────────────────────────
+
+export const registrationApi = {
+  register: (eventId: string, payload: RegisterPayload) =>
+    request<{ success: boolean; data: ApiRegistration }>(`/events/${eventId}/register`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  check: (eventId: string, email: string) =>
+    request<{ success: boolean; registered: boolean; data: ApiRegistration | null }>(
+      `/events/${eventId}/registrations/check?email=${encodeURIComponent(email)}`
+    ),
+
+  list: (eventId: string) =>
+    request<{ success: boolean; data: ApiRegistration[]; count: number; capacity: number | null }>(
+      `/events/${eventId}/registrations`
+    ),
+
+  cancel: (eventId: string, regId: string) =>
+    request<{ success: boolean; data: ApiRegistration }>(`/events/${eventId}/registrations/${regId}`, {
+      method: 'DELETE',
+    }),
+
+  getMyRegistrations: (email: string) =>
+    request<{ success: boolean; data: ApiRegistration[] }>(`/user/registrations?email=${encodeURIComponent(email)}`),
+};
+
+// ─── Bookmark API calls ───────────────────────────────────────────────────────
+
+export interface BookmarkToggleResponse { success: boolean; bookmarked: boolean }
+export interface BookmarkListResponse   { success: boolean; data: ApiEvent[]; count: number }
+export interface BookmarkCheckResponse  { success: boolean; bookmarked: boolean }
+
+export const bookmarkApi = {
+  toggle: (eventId: string) =>
+    request<BookmarkToggleResponse>(`/bookmarks/${eventId}`, { method: 'POST' }),
+
+  check: (eventId: string) =>
+    request<BookmarkCheckResponse>(`/bookmarks/check/${eventId}`, { method: 'POST' }),
+
+  list: () =>
+    request<BookmarkListResponse>('/bookmarks'),
+};
+
+// ─── Save as Template ─────────────────────────────────────────────────────────
+
+export const saveAsTemplate = (eventId: string, name?: string) =>
+  request<TemplateSingleResponse>(`/events/${eventId}/save-as-template`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+
+// ─── Support Ticket API calls ─────────────────────────────────────────────────
+
+export interface ApiSupportTicket {
+  _id: string;
+  event: string;
+  raisedBy: string;
+  subject: string;
+  message: string;
+  status: 'open' | 'resolved';
+  createdAt: string;
+}
+
+export const supportTicketApi = {
+  create: (payload: { event: string; raisedBy: string; subject: string; message: string }) =>
+    request<{ success: boolean; data: ApiSupportTicket }>('/support-tickets', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  listByEvent: (eventId: string) =>
+    request<{ success: boolean; data: ApiSupportTicket[] }>(`/support-tickets/event/${eventId}`),
+
+  listByEmail: (email: string) =>
+    request<{ success: boolean; data: ApiSupportTicket[] }>(`/support-tickets/user/${encodeURIComponent(email)}`),
+
+  resolve: (id: string) =>
+    request<{ success: boolean; data: ApiSupportTicket }>(`/support-tickets/${id}/resolve`, { method: 'PATCH' }),
+};
+

@@ -1,9 +1,36 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { eventApi, API_BASE_URL, type ApiEvent } from '@/services/api';
+import { eventApi, bookmarkApi, API_BASE_URL, type ApiEvent } from '@/services/api';
 import { formatEventDate, getVenueDisplay, getOrganizerName } from '../../EventCatalog/hooks/UseEvents';
 
-const likedStorageKey = (eventId: string) => `event_liked_${eventId}`;
+// ─── Timezone-aware date formatting ──────────────────────────────────────────
+const getUserTimezone = (): string => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+};
+
+const formatDateInTimezone = (isoDate: string, tz: string): string => {
+  if (!isoDate) return '';
+  try {
+    const date = new Date(isoDate);
+    const formatted = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    }).format(date);
+    
+    // Replace raw offsets with abbreviations for common regions like India
+    return formatted.replace(/GMT\+5:30/g, 'IST').replace(/GMT\+05:30/g, 'IST');
+  } catch {
+    return formatEventDate(isoDate);
+  }
+};
+
+
 
 type TicketingTier = {
   name: string;
@@ -45,8 +72,10 @@ export interface EventDetail {
   title: string;
   shortDescription: string;
   description: string;
-  dateInfo: string;
-  endDateInfo: string;
+  dateInfo: string;         // formatted in event timezone
+  endDateInfo: string;      // formatted in event timezone
+  dateInfoLocal?: string;   // formatted in viewer's local timezone (if different)
+  endDateInfoLocal?: string;
   locationInfo: string;
   onlineLink: string;
   format: string;
@@ -159,14 +188,19 @@ const mapApiEventToDetail = (e: ApiEvent): Omit<EventDetail, 'sessions'> => {
 
   const analytics        = (e as unknown as { analytics?: Analytics }).analytics;
   const registrationCount = (e as unknown as { registrationCount?: number }).registrationCount;
+  const eventTz = e.timezone || 'UTC';
+  const userTz  = getUserTimezone();
+  const showLocalTime = eventTz !== userTz;
 
   return {
     id:               e._id,
     title:            e.title ?? 'Untitled Event',
     shortDescription: e.shortDescription ?? '',
     description:      e.description ?? 'No description provided.',
-    dateInfo:         formatEventDate(e.startDate),
-    endDateInfo:      formatEventDate(e.endDate),
+    dateInfo:     formatDateInTimezone(e.startDate, eventTz),
+    endDateInfo:  formatDateInTimezone(e.endDate,   eventTz),
+    dateInfoLocal:    showLocalTime ? formatDateInTimezone(e.startDate, userTz) : undefined,
+    endDateInfoLocal: showLocalTime ? formatDateInTimezone(e.endDate,   userTz) : undefined,
     locationInfo,
     onlineLink:       (() => {
       const raw = v?.onlineLink ?? '';
@@ -242,13 +276,16 @@ export const useEventDetails = () => {
 
   // Interaction state
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
-  const [isLiked, setIsLiked]               = useState(false);
-  const [likeBusy, setLikeBusy]           = useState(false);
-  const [isBookmarked, setIsBookmarked]     = useState(false);
+  const [isLiked, setIsLiked]                   = useState(false);
+  const [likeBusy, setLikeBusy]                 = useState(false);
+  const [isBookmarked, setIsBookmarked]         = useState(false);
+  const [bookmarkBusy, setBookmarkBusy]         = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [isRegistered, setIsRegistered]         = useState(false);
+  const [registeredEmail, setRegisteredEmail]   = useState<string | null>(null);
   const [comments, setComments] = useState<Array<{
     id: string; author: string; text: string; avatar: string;
-  }>>([]);
+  }>>([])
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -287,8 +324,26 @@ export const useEventDetails = () => {
 
         const detail = { ...mapApiEventToDetail(eventRes.data), sessions };
         setEvent(detail);
-        if (typeof window !== 'undefined' && localStorage.getItem(likedStorageKey(detail.id))) {
-          setIsLiked(true);
+        if (typeof window !== 'undefined') {
+          const likedEvents = JSON.parse(localStorage.getItem('likedEvents') || '[]');
+          if (likedEvents.includes(detail.id)) setIsLiked(true);
+          
+          const bookmarkedEvents = JSON.parse(localStorage.getItem('bookmarkedEvents') || '[]');
+          if (bookmarkedEvents.includes(detail.id)) setIsBookmarked(true);
+        }
+
+        // We can optionally verify with server, but UI instantly updates based on localStorage
+        bookmarkApi.check(detail.id)
+          .then(r => {
+            if (r.bookmarked !== undefined) setIsBookmarked(r.bookmarked);
+          })
+          .catch(() => {});
+
+        // Check registration status from localStorage (quick, avoids server round-trip)
+        const storedEmail = localStorage.getItem(`reg_email_${detail.id}`);
+        if (storedEmail) {
+          setIsRegistered(true);
+          setRegisteredEmail(storedEmail);
         }
 
         // View count increment
@@ -349,28 +404,73 @@ export const useEventDetails = () => {
     }
   };
 
+  const toggleBookmark = useCallback(async () => {
+    if (!event || bookmarkBusy) return;
+    setBookmarkBusy(true);
+    const newBookmarked = !isBookmarked;
+    setIsBookmarked(newBookmarked);
+
+    if (typeof window !== 'undefined') {
+      const bookmarkedEvents = JSON.parse(localStorage.getItem('bookmarkedEvents') || '[]');
+      if (newBookmarked) {
+        if (!bookmarkedEvents.includes(event.id)) {
+          localStorage.setItem('bookmarkedEvents', JSON.stringify([...bookmarkedEvents, event.id]));
+        }
+      } else {
+        const filtered = bookmarkedEvents.filter((id: string) => id !== event.id);
+        localStorage.setItem('bookmarkedEvents', JSON.stringify(filtered));
+      }
+    }
+
+    try {
+      await bookmarkApi.toggle(event.id);
+    } catch {
+      /* ignore */
+    } finally {
+      setBookmarkBusy(false);
+    }
+  }, [event, bookmarkBusy, isBookmarked]);
+
+  const handleRegistered = useCallback((email: string, eventId: string) => {
+    setIsRegistered(true);
+    setRegisteredEmail(email);
+    localStorage.setItem(`reg_email_${eventId}`, email);
+  }, []);
+
   const toggleLike = useCallback(async () => {
     if (!event || likeBusy) return;
-    if (typeof window !== 'undefined' && localStorage.getItem(likedStorageKey(event.id))) {
-      setIsLiked(true);
-      return;
-    }
     setLikeBusy(true);
+    const newLiked = !isLiked;
+    setIsLiked(newLiked);
+
+    if (typeof window !== 'undefined') {
+      const likedEvents = JSON.parse(localStorage.getItem('likedEvents') || '[]');
+      if (newLiked) {
+        if (!likedEvents.includes(event.id)) {
+          localStorage.setItem('likedEvents', JSON.stringify([...likedEvents, event.id]));
+        }
+      } else {
+        const filtered = likedEvents.filter((id: string) => id !== event.id);
+        localStorage.setItem('likedEvents', JSON.stringify(filtered));
+      }
+    }
+
     try {
-      const res = await eventApi.like(event.id) as { likes?: number };
-      if (typeof window !== 'undefined') localStorage.setItem(likedStorageKey(event.id), '1');
-      setIsLiked(true);
-      setEvent((prev) => {
-        if (!prev) return prev;
-        const n = res.likes ?? (Number(prev.likes.replace(/,/g, '')) || 0);
-        return { ...prev, likes: n.toLocaleString() };
-      });
+      let newLikesValue: number;
+      if (newLiked) {
+        const res = await eventApi.like(event.id) as { likes?: number };
+        newLikesValue = res.likes ?? (Number(event.likes.replace(/,/g, '')) + 1);
+      } else {
+        await eventApi.unlike(event.id).catch(() => {});
+        newLikesValue = Math.max(0, Number(event.likes.replace(/,/g, '')) - 1);
+      }
+      setEvent((prev) => prev ? { ...prev, likes: newLikesValue.toLocaleString() } : prev);
     } catch {
       /* ignore */
     } finally {
       setLikeBusy(false);
     }
-  }, [event, likeBusy]);
+  }, [event, likeBusy, isLiked]);
 
   return {
     event, loading, error,
@@ -378,8 +478,9 @@ export const useEventDetails = () => {
     isLiked, setIsLiked,
     likeBusy,
     toggleLike,
-    isBookmarked, setIsBookmarked,
+    isBookmarked, toggleBookmark, bookmarkBusy,
+    isRegistered, registeredEmail, handleRegistered,
     selectedTicketId, setSelectedTicketId,
-    comments, handleAddComment,
+    comments: comments ?? [], handleAddComment,
   };
 };

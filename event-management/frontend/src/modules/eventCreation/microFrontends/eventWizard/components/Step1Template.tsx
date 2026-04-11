@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { WizardStepProps } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import { templateApi } from '@/services/api';
@@ -91,7 +91,6 @@ const SkeletonCard: React.FC = () => (
 // ─── Main component ───────────────────────────────────────────────────────────
 export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, errors }) => {
   const [templates, setTemplates]   = useState<ApiTemplate[]>([]);
-  const [filtered, setFiltered] = useState<ApiTemplate[]>([]);
   const [filters, setFilters] = useState<{ eventTypes: Array<{ value: string; label: string }>; tags: Array<{ value: string; label: string }> }>({ eventTypes: [], tags: [] });
   const [q, setQ] = useState('');
   const [eventType, setEventType] = useState('');
@@ -110,7 +109,8 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
       tags: res.data.tags,
     })).catch(() => {});
   }, []);
-  useEffect(() => {
+
+  const filtered = useMemo(() => {
     let list = [...templates];
     if (kind === 'default') list = list.filter((t) => t.isDefault);
     if (kind === 'custom') list = list.filter((t) => !t.isDefault);
@@ -120,30 +120,32 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
       const s = q.trim().toLowerCase();
       list = list.filter((t) => `${t.name} ${t.description} ${t.eventType}`.toLowerCase().includes(s));
     }
-    setFiltered(list);
+    return list;
   }, [templates, kind, eventType, tag, q]);
 
   const handleSelect = (tpl: ApiTemplate) => {
     const mergedFields = mergeSystemFields(tpl.fields ?? []);
 
-    // Build default values for template custom fields
+    const rawSystemFields = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'organizerName'];
+    const venueSysFieldsList = ['venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink'];
+    
+    // Build default values for template custom fields securely, excluding known hardcoded structural fields
     const customFieldDefaults = Object.fromEntries(
       mergedFields
-        .filter((f) => f.section === 'custom' || f.section === 'policies')
+        .filter((f) => !rawSystemFields.includes(f.key) && !venueSysFieldsList.includes(f.key) && f.defaultValue)
         .map((f) => [f.key, f.defaultValue ?? ''])
     );
 
     const onlineLinkDefault = mergedFields.find(f => f.key === 'onlineLink')?.defaultValue ?? '';
-    const venueSysFields = ['venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country'].reduce((acc: any, k) => {
+    const venueSysFields = ['venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country'].reduce((acc: Record<string, string>, k) => {
       const val = mergedFields.find(f => f.key === k)?.defaultValue;
       if (val) acc[k.replace('venue_', '')] = val;
       return acc;
     }, {});
 
-    const rawSystemFields = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity'];
     const otherSysDefaults = mergedFields
       .filter((f) => rawSystemFields.includes(f.key) && f.defaultValue)
-      .reduce((acc: any, f) => { acc[f.key] = f.defaultValue; return acc; }, {});
+      .reduce((acc: Record<string, string>, f) => { acc[f.key] = f.defaultValue ?? ''; return acc; }, {} as Record<string, string>);
 
     updateData({
       template:   tpl._id,
@@ -162,7 +164,7 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
       customFieldValues: customFieldDefaults,
       ...otherSysDefaults,
       eventType:  otherSysDefaults.eventType || tpl.eventType,
-      format:     otherSysDefaults.format || tpl.format as typeof data.format,
+      format:     (otherSysDefaults.format || tpl.format) as typeof data.format,
       isFree:     otherSysDefaults.isFree !== undefined ? otherSysDefaults.isFree === 'true' : tpl.isFree,
       visibility: (tpl.defaultVisibility as typeof data.visibility) || 'public',
       venue: { ...data.venue, onlineLink: onlineLinkDefault, ...venueSysFields },

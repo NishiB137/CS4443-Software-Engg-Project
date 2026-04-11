@@ -11,6 +11,7 @@ export const SESSION_SYSTEM_FIELDS: FieldSpec[] = [
   { key: 'startTime', label: 'Start Time', fieldType: 'time', required: true, section: 'datetime', order: 1, form: 'Session Details', category: 'Date & Time' },
   { key: 'endDate', label: 'End Date', fieldType: 'date', required: true, section: 'datetime', order: 2, form: 'Session Details', category: 'Date & Time' },
   { key: 'endTime', label: 'End Time', fieldType: 'time', required: true, section: 'datetime', order: 3, form: 'Session Details', category: 'Date & Time' },
+  { key: 'timezone', label: 'Timezone', fieldType: 'select', options: ['UTC', 'Asia/Kolkata', 'America/New_York', 'America/Los_Angeles', 'Europe/London'], required: false, section: 'datetime', order: 4, form: 'Session Details', category: 'Date & Time' },
 
   { key: 'room', label: 'Room / Hall', fieldType: 'text', required: false, section: 'venue', order: 0, form: 'Session Details', category: 'Location' },
   { key: 'maxAttendees', label: 'Max Attendees', fieldType: 'number', required: false, min: 1, section: 'capacity', order: 0, form: 'Session Details', category: 'Location' },

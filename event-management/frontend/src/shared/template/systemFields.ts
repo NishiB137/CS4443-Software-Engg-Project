@@ -37,9 +37,9 @@ const defaultLayoutBySection: Record<string, { form: string; category: string; f
   datetime: { form: 'Basic Info', category: 'Date & Time',   formOrder: 0, categoryOrder: 1 },
   venue:    { form: 'Basic Info', category: 'Venue',         formOrder: 0, categoryOrder: 2 },
   capacity: { form: 'Basic Info', category: 'Capacity',      formOrder: 0, categoryOrder: 3 },
+  media:    { form: 'Basic Info', category: 'Media',         formOrder: 0, categoryOrder: 4 },
   policies: { form: 'About this event', category: 'Policies', formOrder: 1, categoryOrder: 0 },
-  media:    { form: 'About this event', category: 'Media',    formOrder: 1, categoryOrder: 1 },
-  custom:   { form: 'About this event', category: 'Custom',   formOrder: 1, categoryOrder: 2 },
+  custom:   { form: 'About this event', category: 'Custom',   formOrder: 1, categoryOrder: 1 },
 };
 
 export function withDefaultLayout(f: FieldSpec): FieldSpec {

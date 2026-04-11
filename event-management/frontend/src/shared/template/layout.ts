@@ -33,6 +33,12 @@ export function ensurePoliciesCategory(layout: TemplateLayout, options?: { formN
     cats.push({ name: 'Policies', order: cats.length });
     form.categories = cats;
   }
+  
+  // Ensure "Registration" form exists
+  if (!next.forms.some((f) => f.name === 'Registration')) {
+    next.forms.push({ name: 'Registration', order: next.forms.length, categories: [{ name: 'Contact Info', order: 0 }] });
+  }
+
   return {
     forms: next.forms
       .map((f) => ({ ...f, categories: (f.categories ?? []).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name)) }))

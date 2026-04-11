@@ -3,6 +3,7 @@ import type { SessionFormData, SessionSpeaker } from '@/modules/eventCreation/mi
 import { EMPTY_SESSION, LIMITS } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 import type { SessionTemplate, FieldSpec } from '@/services/api';
 import { SESSION_SYSTEM_FIELDS, SESSION_SYSTEM_FIELD_KEYS } from '@/shared/template/sessionSystemFields';
+import { DateTimePicker } from '@/modules/eventCreation/microFrontends/eventWizard/components/DateTimePicker';
 
 const SESSION_TYPES = [
   { value: 'keynote',           label: 'Keynote' },
@@ -52,7 +53,7 @@ const validateSession = (s: SessionFormData, fields: FieldSpec[]): SessionErrors
 
   for (const f of fields) {
     const isSys = SESSION_SYSTEM_FIELD_KEYS.includes(f.key);
-    const val = String((isSys ? (s as any)[f.key] : s.customFieldValues[f.key]) ?? '').trim();
+    const val = String((isSys ? (s as unknown as Record<string, unknown>)[f.key] : s.customFieldValues[f.key]) ?? '').trim();
     if (f.required && !val) {
       errors[f.key] = `${f.label} is required.`;
     }
@@ -237,7 +238,7 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
                 <div className="space-y-4">
                   {fds.map((f) => {
                     const isSys = SESSION_SYSTEM_FIELD_KEYS.includes(f.key);
-                    const val = String((isSys ? (session as any)[f.key] : session.customFieldValues[f.key]) ?? '');
+                    const val = String((isSys ? (session as unknown as Record<string, unknown>)[f.key] : session.customFieldValues[f.key]) ?? '');
                     const err = !!errors[f.key];
 
                     const setVal = (v: string) => {
@@ -251,7 +252,7 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
                     const common = {
                       className: inputCls(err),
                       value: val,
-                      onChange: (e: React.ChangeEvent<any>) => setVal(e.target.value),
+                      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setVal(e.target.value),
                     };
 
                     return (
@@ -307,7 +308,20 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
                           </div>
                           <FieldError msg={errors[f.key]} />
                         </div>
-                      ) : (
+                      ) : (f.key === 'startDate' || f.key === 'endDate') ? (
+                        <div>
+                          <DateTimePicker
+                            id={f.key}
+                            dateValue={String((session as unknown as Record<string, unknown>)[f.key] ?? '')}
+                            timeValue={String((session as unknown as Record<string, unknown>)[f.key === 'startDate' ? 'startTime' : 'endTime'] ?? '')}
+                            onChange={(d, t) => {
+                              update({ [f.key]: d, [f.key === 'startDate' ? 'startTime' : 'endTime']: t });
+                            }}
+                            className={err ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50' : ''}
+                          />
+                          <FieldError msg={errors[f.key] || errors[f.key === 'startDate' ? 'startTime' : 'endTime']} />
+                        </div>
+                      ) : (f.key === 'startTime' || f.key === 'endTime') ? null : (
                         <div>
                           <input
                             type={
