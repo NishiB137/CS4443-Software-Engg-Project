@@ -8,6 +8,7 @@ import templateRoutes from './routes/templateRoutes.js';
 import uploadRoutes   from './routes/uploadRoutes.js';
 import bookmarkRoutes from './routes/bookmarkRoutes.js';
 import supportTicketRoutes from './routes/supportTicketRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 import * as registrationController from './controllers/registrationController.js';
 
 // ─── Model imports ─────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ app.use('/api/templates',    templateRoutes);
 app.use('/api/upload',       uploadRoutes);
 app.use('/api/bookmarks',    bookmarkRoutes);
 app.use('/api/support-tickets', supportTicketRoutes);
+app.use('/api/auth',         authRoutes);
 app.get('/api/user/registrations', registrationController.getMyRegistrations);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────

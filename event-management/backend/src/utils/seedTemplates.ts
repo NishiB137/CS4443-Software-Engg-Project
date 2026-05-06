@@ -4,28 +4,28 @@ import type { IFieldSpec, ISessionTemplate } from '../models/EventTemplate.js';
 // ─── Shared core fields used by most templates ────────────────────────────────
 
 const coreBasicsFields = (order = 0): IFieldSpec[] => [
-  { key: 'title',            label: 'Event Name',         fieldType: 'text',     required: true,  placeholder: 'e.g. Tech Summit 2026',    section: 'basics',  order: order + 0, maxLength: 150 },
-  { key: 'shortDescription', label: 'Short Description',  fieldType: 'text',     required: false, placeholder: 'One-liner for event cards', section: 'basics',  order: order + 1, maxLength: 300 },
-  { key: 'description',      label: 'Full Description',   fieldType: 'textarea', required: true,  placeholder: 'Describe your event in detail', section: 'basics', order: order + 2, maxLength: 10000 },
-  { key: 'eventType',        label: 'Event Type',         fieldType: 'select',   required: true,  section: 'basics',  order: order + 3, options: ['conference','workshop','hackathon','concert','exhibition','summit','festival','competition','webinar','other'] },
-  { key: 'format',           label: 'Event Format',       fieldType: 'select',   required: true,  section: 'basics',  order: order + 4, options: ['physical','virtual','hybrid'] },
-  { key: 'isFree',           label: 'Free Event',         fieldType: 'toggle',   required: false, defaultValue: 'true', section: 'basics', order: order + 5 },
+  { key: 'title', label: 'Event Name', fieldType: 'text', required: true, placeholder: 'e.g. Tech Summit 2026', section: 'basics', order: order + 0, maxLength: 150 },
+  { key: 'shortDescription', label: 'Short Description', fieldType: 'text', required: false, placeholder: 'One-liner for event cards', section: 'basics', order: order + 1, maxLength: 300 },
+  { key: 'description', label: 'Full Description', fieldType: 'textarea', required: true, placeholder: 'Describe your event in detail', section: 'basics', order: order + 2, maxLength: 10000 },
+  { key: 'eventType', label: 'Event Type', fieldType: 'select', required: true, section: 'basics', order: order + 3, options: ['conference', 'workshop', 'hackathon', 'concert', 'exhibition', 'summit', 'festival', 'competition', 'webinar', 'other'] },
+  { key: 'format', label: 'Event Format', fieldType: 'select', required: true, section: 'basics', order: order + 4, options: ['physical', 'virtual', 'hybrid'] },
+  { key: 'isFree', label: 'Free Event', fieldType: 'toggle', required: false, defaultValue: 'true', section: 'basics', order: order + 5 },
 ];
 
 const coreDateFields = (order = 10): IFieldSpec[] => [
   { key: 'startDate', label: 'Start Date', fieldType: 'date', required: true, section: 'datetime', order: order + 0 },
   { key: 'startTime', label: 'Start Time', fieldType: 'time', required: true, section: 'datetime', order: order + 1 },
-  { key: 'endDate',   label: 'End Date',   fieldType: 'date', required: true, section: 'datetime', order: order + 2 },
-  { key: 'endTime',   label: 'End Time',   fieldType: 'time', required: true, section: 'datetime', order: order + 3 },
-  { key: 'timezone',  label: 'Timezone',   fieldType: 'select', required: false, defaultValue: 'Asia/Kolkata', section: 'datetime', order: order + 4, options: ['Asia/Kolkata','America/New_York','Europe/London','America/Los_Angeles','Asia/Singapore','UTC'] },
+  { key: 'endDate', label: 'End Date', fieldType: 'date', required: true, section: 'datetime', order: order + 2 },
+  { key: 'endTime', label: 'End Time', fieldType: 'time', required: true, section: 'datetime', order: order + 3 },
+  { key: 'timezone', label: 'Timezone', fieldType: 'text', required: false, defaultValue: 'Asia/Kolkata', section: 'datetime', order: order + 4 },
 ];
 
 const coreVenueFields = (order = 20): IFieldSpec[] => [
-  { key: 'venue_name',    label: 'Venue Name',    fieldType: 'text', required: false, placeholder: 'e.g. Grand Convention Center', section: 'venue', order: order + 0, maxLength: 200 },
-  { key: 'venue_address', label: 'Street Address',fieldType: 'text', required: false, placeholder: '123 Main St',                  section: 'venue', order: order + 1, maxLength: 200 },
-  { key: 'venue_city',    label: 'City',          fieldType: 'text', required: false, placeholder: 'City',                         section: 'venue', order: order + 2, maxLength: 200 },
-  { key: 'venue_state',   label: 'State',         fieldType: 'text', required: false, placeholder: 'State',                        section: 'venue', order: order + 3, maxLength: 200 },
-  { key: 'venue_country', label: 'Country',       fieldType: 'text', required: false, placeholder: 'Country',                      section: 'venue', order: order + 4, maxLength: 200 },
+  { key: 'venue_name', label: 'Venue Name', fieldType: 'text', required: false, placeholder: 'e.g. Grand Convention Center', section: 'venue', order: order + 0, maxLength: 200 },
+  { key: 'venue_address', label: 'Street Address', fieldType: 'text', required: false, placeholder: '123 Main St', section: 'venue', order: order + 1, maxLength: 200 },
+  { key: 'venue_city', label: 'City', fieldType: 'text', required: false, placeholder: 'City', section: 'venue', order: order + 2, maxLength: 200 },
+  { key: 'venue_state', label: 'State', fieldType: 'text', required: false, placeholder: 'State', section: 'venue', order: order + 3, maxLength: 200 },
+  { key: 'venue_country', label: 'Country', fieldType: 'text', required: false, placeholder: 'Country', section: 'venue', order: order + 4, maxLength: 200 },
 ];
 
 const capacityField = (order = 30): IFieldSpec => ({
@@ -34,9 +34,9 @@ const capacityField = (order = 30): IFieldSpec => ({
 });
 
 const policyFields = (order = 40): IFieldSpec[] => [
-  { key: 'refundPolicy',       label: 'Refund Policy',      fieldType: 'select',   required: false, defaultValue: 'no_refund', section: 'policies', order: order + 0, options: ['full','partial','no_refund'] },
-  { key: 'cancellationPolicy', label: 'Cancellation Policy',fieldType: 'textarea', required: false, defaultValue: 'Non-refundable.', section: 'policies', order: order + 1, maxLength: 2000 },
-  { key: 'attendeeMinAge',     label: 'Minimum Attendee Age',fieldType: 'number',  required: false, defaultValue: '0',   section: 'policies', order: order + 2, min: 0, max: 120 },
+  { key: 'refundPolicy', label: 'Refund Policy', fieldType: 'select', required: false, defaultValue: 'no_refund', section: 'policies', order: order + 0, options: ['full', 'partial', 'no_refund'] },
+  { key: 'cancellationPolicy', label: 'Cancellation Policy', fieldType: 'textarea', required: false, defaultValue: 'Non-refundable.', section: 'policies', order: order + 1, maxLength: 2000 },
+  { key: 'attendeeMinAge', label: 'Minimum Attendee Age', fieldType: 'number', required: false, defaultValue: '0', section: 'policies', order: order + 2, min: 0, max: 120 },
 ];
 
 const onlineLinkField = (order = 25): IFieldSpec => ({
@@ -208,7 +208,7 @@ const SEED_TEMPLATES = [
       capacityField(30),
       ...policyFields(40),
       { key: 'organizerName', label: 'Organizer Name', fieldType: 'text', required: false, section: 'basics', order: 6, maxLength: 150 } as IFieldSpec,
-      { key: 'pocEmail',      label: 'Point of Contact Email', fieldType: 'email', required: false, section: 'basics', order: 7 } as IFieldSpec,
+      { key: 'pocEmail', label: 'Point of Contact Email', fieldType: 'email', required: false, section: 'basics', order: 7 } as IFieldSpec,
       ...professionalRegistrationFields(60),
     ],
     sessionTemplates: [keynoteSessionTemplate(), panelSessionTemplate(), workshopSessionTemplate(), networkingSessionTemplate()],
@@ -265,7 +265,7 @@ const SEED_TEMPLATES = [
       capacityField(30),
       ...coreMediaFields(45),
       ...policyFields(40),
-      { key: 'streamPlatform', label: 'Streaming Platform', fieldType: 'select', required: false, section: 'custom', order: 50, options: ['Zoom','Google Meet','YouTube Live','Microsoft Teams','Custom'] } as IFieldSpec,
+      { key: 'streamPlatform', label: 'Streaming Platform', fieldType: 'select', required: false, section: 'custom', order: 50, options: ['Zoom', 'Google Meet', 'YouTube Live', 'Microsoft Teams', 'Custom'] } as IFieldSpec,
       ...coreRegistrationFields(60),
     ],
     sessionTemplates: [keynoteSessionTemplate(), panelSessionTemplate()],
@@ -294,17 +294,17 @@ const SEED_TEMPLATES = [
       onlineLinkField(26),
       capacityField(30),
       ...policyFields(40),
-      { key: 'teamSizeMin', label: 'Min Team Size',   fieldType: 'number', required: false, defaultValue: '1', min: 1, max: 20, section: 'custom', order: 50 } as IFieldSpec,
-      { key: 'teamSizeMax', label: 'Max Team Size',   fieldType: 'number', required: false, defaultValue: '4', min: 1, max: 20, section: 'custom', order: 51 } as IFieldSpec,
-      { key: 'prizePool',   label: 'Prize Pool (₹)', fieldType: 'number', required: false, min: 0, section: 'custom', order: 52 } as IFieldSpec,
-      { key: 'theme',       label: 'Hackathon Theme',fieldType: 'text',   required: false, maxLength: 200, section: 'custom', order: 53 } as IFieldSpec,
+      { key: 'teamSizeMin', label: 'Min Team Size', fieldType: 'number', required: false, defaultValue: '1', min: 1, max: 20, section: 'custom', order: 50 } as IFieldSpec,
+      { key: 'teamSizeMax', label: 'Max Team Size', fieldType: 'number', required: false, defaultValue: '4', min: 1, max: 20, section: 'custom', order: 51 } as IFieldSpec,
+      { key: 'prizePool', label: 'Prize Pool (₹)', fieldType: 'number', required: false, min: 0, section: 'custom', order: 52 } as IFieldSpec,
+      { key: 'theme', label: 'Hackathon Theme', fieldType: 'text', required: false, maxLength: 200, section: 'custom', order: 53 } as IFieldSpec,
       ...professionalRegistrationFields(60),
     ],
     sessionTemplates: [
       { title: 'Opening Ceremony', sessionType: 'keynote', defaultDurationMinutes: 30, description: 'Welcome and problem statement reveal', defaultFields: [] },
-      { title: 'Hacking Period',   sessionType: 'other',   defaultDurationMinutes: 480, description: 'Main coding phase',                   defaultFields: [] },
-      { title: 'Judging Round',    sessionType: 'competition_round', defaultDurationMinutes: 120, description: 'Project presentations & judging', defaultFields: [] },
-      { title: 'Award Ceremony',   sessionType: 'keynote', defaultDurationMinutes: 30,  description: 'Winners announced & prizes distributed', defaultFields: [] },
+      { title: 'Hacking Period', sessionType: 'other', defaultDurationMinutes: 480, description: 'Main coding phase', defaultFields: [] },
+      { title: 'Judging Round', sessionType: 'competition_round', defaultDurationMinutes: 120, description: 'Project presentations & judging', defaultFields: [] },
+      { title: 'Award Ceremony', sessionType: 'keynote', defaultDurationMinutes: 30, description: 'Winners announced & prizes distributed', defaultFields: [] },
     ],
   },
 
@@ -330,14 +330,14 @@ const SEED_TEMPLATES = [
       ...coreVenueFields(20),
       capacityField(30),
       ...policyFields(40),
-      { key: 'artists',    label: 'Artists / Performers', fieldType: 'textarea', required: false, placeholder: 'List of performers', section: 'custom', order: 50, maxLength: 500 } as IFieldSpec,
-      { key: 'ageRating',  label: 'Age Rating',           fieldType: 'select',   required: false, section: 'custom', order: 51, options: ['All ages','13+','16+','18+'] } as IFieldSpec,
+      { key: 'artists', label: 'Artists / Performers', fieldType: 'textarea', required: false, placeholder: 'List of performers', section: 'custom', order: 50, maxLength: 500 } as IFieldSpec,
+      { key: 'ageRating', label: 'Age Rating', fieldType: 'select', required: false, section: 'custom', order: 51, options: ['All ages', '13+', '16+', '18+'] } as IFieldSpec,
       ...coreRegistrationFields(60),
     ],
     sessionTemplates: [
-      { title: 'Opening Act',      sessionType: 'performance', defaultDurationMinutes: 30, description: 'Support act before main performance', defaultFields: [] },
+      { title: 'Opening Act', sessionType: 'performance', defaultDurationMinutes: 30, description: 'Support act before main performance', defaultFields: [] },
       { title: 'Main Performance', sessionType: 'performance', defaultDurationMinutes: 90, description: 'Headline artist set', defaultFields: [] },
-      { title: 'Intermission',     sessionType: 'break',       defaultDurationMinutes: 20, description: 'Break between sets', defaultFields: [] },
+      { title: 'Intermission', sessionType: 'break', defaultDurationMinutes: 20, description: 'Break between sets', defaultFields: [] },
     ],
   },
 
@@ -364,8 +364,8 @@ const SEED_TEMPLATES = [
       onlineLinkField(26),
       capacityField(30),
       ...policyFields(40),
-      { key: 'companyName',   label: 'Hosting Company', fieldType: 'text',   required: false, maxLength: 200, section: 'basics', order: 7 } as IFieldSpec,
-      { key: 'dressCode',     label: 'Dress Code',      fieldType: 'select', required: false, section: 'custom', order: 50, options: ['Business Formal','Business Casual','Smart Casual','Casual'] } as IFieldSpec,
+      { key: 'companyName', label: 'Hosting Company', fieldType: 'text', required: false, maxLength: 200, section: 'basics', order: 7 } as IFieldSpec,
+      { key: 'dressCode', label: 'Dress Code', fieldType: 'select', required: false, section: 'custom', order: 50, options: ['Business Formal', 'Business Casual', 'Smart Casual', 'Casual'] } as IFieldSpec,
       { key: 'cateringNotes', label: 'Catering / Dietary Notes', fieldType: 'textarea', required: false, maxLength: 500, section: 'custom', order: 51 } as IFieldSpec,
       ...professionalRegistrationFields(60),
     ],

@@ -38,6 +38,7 @@ export interface ApiEvent {
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
+  currency?: string;
   startDate: string;
   endDate: string;
   timezone: string;
@@ -61,7 +62,10 @@ export interface ApiEvent {
   pocDetails?: { name?: string; email?: string; phone?: string };
   organization: { _id: string; name: string; slug: string; logo?: string } | string;
   createdBy: { _id: string; name: string; email: string } | string;
+  team?: Array<{ user: { _id: string; username: string; name: string; email: string } | string; role: string; assignedAt: string }>;
   tags?: Array<{ _id: string; name: string; slug: string }>;
+  pricing?: { basePrice: number; discountPercentage: number };
+  ticketingTiers?: Array<{ name: string; price: number; capacity: number; duration?: string; description?: string }>;
   analytics: { likes: number; bookmarks: number; views: number; registrations: number };
   policies?: Record<string, unknown>;
   faqs?: Array<{ question: string; answer: string }>;
@@ -78,6 +82,16 @@ export interface ApiEvent {
     category?: string;
   }>;
   templateId?: string;
+  entrySettings?: {
+    enableAttendanceManagement: boolean;
+    scannerType: 'qr' | 'none';
+    requireSpecificTime: boolean;
+    entryStartTime?: string;
+    entryEndTime?: string;
+  };
+  requiresRegistration?: boolean;
+  requiresReview?: boolean;
+  reviewer?: string | { _id: string; username: string; name: string; email: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -101,7 +115,10 @@ export interface CreateEventPayload {
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
+  currency?: string;
+  ticketingTiers?: Array<{ name: string; price: number; capacity: number; description?: string }>;
   tags?: string[];
+
   notes?: string;
   startDate: string;
   endDate: string;
@@ -149,6 +166,11 @@ export interface CreateEventPayload {
   // Sprint 2: passed directly until auth is wired up
   organization?: string;
   createdBy?: string;
+  team?: Array<{ user: string; role: string }>;
+  /** Whether this event needs a review before publishing */
+  requiresReview?: boolean;
+  /** The ObjectId of the reviewer (must be a team member) */
+  reviewer?: string;
 }
 
 export interface ListEventsResponse {
@@ -175,6 +197,8 @@ export const eventApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request<ListEventsResponse>(`/events${qs}`);
   },
+
+  getTimezones: () => request<{ success: boolean; data: string[] }>('/events/timezones'),
 
   getById: (id: string) =>
     request<SingleEventResponse>(`/events/${id}`),
@@ -225,7 +249,30 @@ export const eventApi = {
       method: 'POST',
       body: JSON.stringify({ userId, userName, content }),
     }),
+
+  approve: (id: string, changedBy?: string) =>
+    request<SingleEventResponse>(`/events/${id}/approve`, {
+      method: 'PATCH',
+      body: JSON.stringify({ changedBy }),
+    }),
+
+  reject: (id: string, changedBy?: string, reason?: string) =>
+    request<SingleEventResponse>(`/events/${id}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({ changedBy, reason }),
+    }),
+
+  listPendingReview: (reviewerId?: string) => {
+    const qs = reviewerId ? `?reviewerId=${encodeURIComponent(reviewerId)}` : '';
+    return request<{ success: boolean; data: ApiEvent[] }>(`/events/pending-review${qs}`);
+  },
+
+  getRecommendations: (userId?: string) => {
+    const qs = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    return request<{ success: boolean; forYou: ApiEvent[]; trending: ApiEvent[]; viewedEventTypes: string[] }>(`/events/recommendations${qs}`);
+  },
 };
+
 
 // ─── Template types ───────────────────────────────────────────────────────────
 
@@ -285,6 +332,19 @@ export interface ApiTemplate {
   eventType: string;
   format: 'physical' | 'virtual' | 'hybrid';
   isFree: boolean;
+  defaultCurrency?: string;
+  defaultTicketingTiers?: Array<{ name: string; price: number; capacity: number; description?: string }>;
+  requiresRegistration?: boolean;
+  defaultRegistrationFields?: Array<{
+    key: string;
+    label: string;
+    fieldType: 'text' | 'email' | 'phone' | 'textarea' | 'select';
+    required: boolean;
+    options?: string[];
+    category?: string;
+    categoryOrder?: number;
+    order?: number;
+  }>;
   isDefault: boolean;
   isSystemTemplate: boolean;
   coverColor: string;
@@ -295,6 +355,11 @@ export interface ApiTemplate {
   defaultVisibility: string;
   defaultStatus: string;
   defaultPolicies: { refundPolicy?: string; cancellationPolicy?: string; attendeeMinAge?: number };
+  defaultEntrySettings?: {
+    enableAttendanceManagement: boolean;
+    scannerType: 'qr' | 'none';
+    requireSpecificTime: boolean;
+  };
   allowsSubEvents: boolean;
   maxSubEventDepth: number;
   usageCount: number;
@@ -313,7 +378,7 @@ export interface TemplateFiltersResponse {
   };
 }
 
-export interface TemplateListResponse  { success: boolean; data: ApiTemplate[] }
+export interface TemplateListResponse { success: boolean; data: ApiTemplate[] }
 export interface TemplateSingleResponse { success: boolean; data: ApiTemplate }
 
 // ─── Template API calls ───────────────────────────────────────────────────────
@@ -384,13 +449,19 @@ export interface ApiRegistration {
   formResponses: Record<string, unknown>;
   registrationDate: string;
   createdAt: string;
+  checkedIn?: boolean;
+  checkedInAt?: string[];
+  checkedOut?: boolean;
+  checkedOutAt?: string[];
+  checkInCount?: number;
+  qrToken?: string;
 }
 
 export interface RegisterPayload {
-  attendeeName:  string;
+  attendeeName: string;
   attendeeEmail: string;
   attendeePhone?: string;
-  ticketTier?:   string;
+  ticketTier?: string;
   formResponses?: Record<string, unknown>;
 }
 
@@ -398,7 +469,7 @@ export interface RegisterPayload {
 
 export const registrationApi = {
   register: (eventId: string, payload: RegisterPayload) =>
-    request<{ success: boolean; data: ApiRegistration }>(`/events/${eventId}/register`, {
+    request<{ success: boolean; data: ApiRegistration; newAccount?: { _id: string; username: string; email: string; name: string; isGuest: boolean } | null }>(`/events/${eventId}/register`, {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -420,13 +491,26 @@ export const registrationApi = {
 
   getMyRegistrations: (email: string) =>
     request<{ success: boolean; data: ApiRegistration[] }>(`/user/registrations?email=${encodeURIComponent(email)}`),
+
+  /** Check-in via QR scan */
+  checkIn: (eventId: string, qrToken: string) =>
+    request<{ success: boolean; data: ApiRegistration; message: string }>(`/events/${eventId}/validate-qr`, {
+      method: 'POST',
+      body: JSON.stringify({ qrToken }),
+    }),
+
+  /** Manual check-out by registration ID (organizer action, no QR required) */
+  checkOut: (eventId: string, regId: string) =>
+    request<{ success: boolean; data: ApiRegistration; message: string }>(`/events/${eventId}/registrations/${regId}/checkout`, {
+      method: 'POST',
+    }),
 };
 
 // ─── Bookmark API calls ───────────────────────────────────────────────────────
 
 export interface BookmarkToggleResponse { success: boolean; bookmarked: boolean }
-export interface BookmarkListResponse   { success: boolean; data: ApiEvent[]; count: number }
-export interface BookmarkCheckResponse  { success: boolean; bookmarked: boolean }
+export interface BookmarkListResponse { success: boolean; data: ApiEvent[]; count: number }
+export interface BookmarkCheckResponse { success: boolean; bookmarked: boolean }
 
 export const bookmarkApi = {
   toggle: (eventId: string) =>
@@ -476,3 +560,35 @@ export const supportTicketApi = {
     request<{ success: boolean; data: ApiSupportTicket }>(`/support-tickets/${id}/resolve`, { method: 'PATCH' }),
 };
 
+// ─── Auth API calls ───────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  _id: string;
+  username: string;
+  name: string;
+  email: string;
+  role: string;
+  isGuest?: boolean;
+}
+
+export const authApi = {
+  signup: (username: string, email: string, name?: string) =>
+    request<{ success: boolean; data: AuthUser }>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ username, email, name: name || username }),
+    }),
+
+  login: (username: string) =>
+    request<{ success: boolean; data: AuthUser }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username }),
+    }),
+
+  checkUsername: (username: string) =>
+    request<{ success: boolean; available: boolean }>(`/auth/check-username?username=${encodeURIComponent(username)}`),
+
+  getUserByUsername: (username: string) =>
+    request<{ success: boolean; data: { _id: string; username: string; name: string; email: string; role: string } }>(
+      `/auth/user-by-username?username=${encodeURIComponent(username)}`
+    ),
+};

@@ -91,6 +91,16 @@ export interface TicketingTier {
   description?: string;
 }
 
+// ─── Team / Co-Organiser ──────────────────────────────────────────────────────
+
+export interface TeamMember {
+  _id: string;
+  username: string;
+  name: string;
+  email: string;
+  role: 'event_manager' | 'viewer' | 'co_organizer' | 'reviewer';
+}
+
 /** Built-in fields that organizers can include on the registration form */
 export const REGISTRATION_FIELD_OPTIONS: RegistrationField[] = [
   { key: 'attendeeName',         label: 'Full Name',               fieldType: 'text',     required: true  },
@@ -132,7 +142,8 @@ export interface EventFormData {
   eventType: string;
   customEventType?: string;
   format: 'physical' | 'virtual' | 'hybrid';
-  isFree: boolean;
+  isPaid: boolean;
+  currency: string;
   tags: string[];
   notes: string;
   startDate: string;
@@ -155,6 +166,15 @@ export interface EventFormData {
   requiresRegistration: boolean;
   /** Which fields to display on the registration form */
   registrationFields: RegistrationField[];
+  
+  entrySettings: {
+    enableAttendanceManagement: boolean;
+    scannerType: 'qr' | 'none';
+    requireSpecificTime: boolean;
+    entryStartTime: string;
+    entryEndTime: string;
+  };
+  
   policies: {
     refundPolicy: 'full' | 'partial' | 'no_refund' | '';
     cancellationPolicy: string;
@@ -167,6 +187,12 @@ export interface EventFormData {
   faqs: Array<{ question: string; answer: string }>;
   sessions: SessionFormData[];
   submitAs: 'draft' | 'review' | 'approved' | 'published' | 'ongoing' | 'completed' | 'archived';
+  /** Co-organisers added by the event creator */
+  team: TeamMember[];
+  /** Whether the event requires a review before going live */
+  requiresReview: boolean;
+  /** The _id of the team member designated as reviewer */
+  reviewerId: string;
 }
 
 export type StepErrors = Partial<Record<string, string>>;
@@ -196,7 +222,7 @@ export const currentTime = (): string => {
 export interface StepDef {
   id: string;
   title: string;
-  type: 'template' | 'form' | 'visibility' | 'registration' | 'ticketingTiers' | 'sessions' | 'faq' | 'review';
+  type: 'template' | 'form' | 'visibility' | 'registration' | 'ticketingTiers' | 'sessions' | 'faq' | 'review' | 'team_review';
   formName?: string;
 }
 
@@ -220,10 +246,39 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
   if (step.type === 'template') return validateStep1(data);
   if (step.type === 'visibility') return {};
   if (step.type === 'registration') {
-    if (data.requiresRegistration && data.registrationFields.length === 0) {
-      return { registration: 'Please select at least one field to collect from attendees.' };
+    const errors: StepErrors = {};
+    if (data.requiresRegistration) {
+      if (data.registrationFields.length === 0) {
+        errors['registration'] = 'Please select at least one field to collect from attendees.';
+      }
+      const hasName  = data.registrationFields.some(f => f.key === 'attendeeName');
+      const hasEmail = data.registrationFields.some(f => f.key === 'attendeeEmail');
+      if (!hasName)  errors['registration_name']  = 'Full Name (attendeeName) field is required for registrations.';
+      if (!hasEmail) errors['registration_email'] = 'Email Address (attendeeEmail) field is required for registrations.';
     }
-    return {};
+    // Paid events MUST require registration
+    const isPaid = data.isPaid === true || String(data.isPaid) === 'true';
+    if (isPaid && !data.requiresRegistration) {
+      errors['requiresRegistration'] = 'Paid events must have registration enabled.';
+    }
+    return errors;
+  }
+  if (step.type === 'ticketingTiers') {
+    const errors: StepErrors = {};
+    const isPaid = data.isPaid === true || String(data.isPaid) === 'true';
+    if (isPaid) {
+      const validTiers = data.ticketingTiers.filter(t => t.name && t.name.trim() !== '');
+      if (validTiers.length === 0) {
+        errors['ticketingTiers'] = 'Paid events must have at least one ticket tier.';
+      } else {
+        validTiers.forEach((t, i) => {
+          if (!t.name.trim()) errors[`tier_${i}_name`] = `Tier ${i + 1}: name is required.`;
+          if (t.price < 0)    errors[`tier_${i}_price`] = `Tier ${i + 1}: price cannot be negative.`;
+          if (t.capacity <= 0) errors[`tier_${i}_capacity`] = `Tier ${i + 1}: capacity must be at least 1.`;
+        });
+      }
+    }
+    return errors;
   }
   if (step.type === 'sessions') return validateStep4(data);
   if (step.type === 'review') return {};
@@ -234,7 +289,7 @@ export const validateStep = (step: StepDef, data: EventFormData): StepErrors => 
     const fieldKeys = new Set(fieldsInForm.map(f => f.key));
 
     for (const f of fieldsInForm) {
-      const val = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isFree', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink', 'shareOnlineLinkLater', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge', 'coverImage', 'secondaryImages', 'videoUrl'].includes(f.key)
+      const val = ['title', 'description', 'shortDescription', 'eventType', 'format', 'isPaid', 'startDate', 'startTime', 'endDate', 'endTime', 'timezone', 'maxCapacity', 'venue_name', 'venue_address', 'venue_city', 'venue_state', 'venue_country', 'onlineLink', 'shareOnlineLinkLater', 'refundPolicy', 'cancellationPolicy', 'attendeeMinAge', 'coverImage', 'secondaryImages', 'videoUrl'].includes(f.key)
         ? (() => {
             if (f.key.startsWith('venue_')) return data.venue[f.key.replace('venue_', '') as keyof typeof data.venue];
             if (f.key === 'refundPolicy' || f.key === 'cancellationPolicy' || f.key === 'attendeeMinAge') return data.policies[f.key as keyof typeof data.policies];

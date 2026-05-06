@@ -185,6 +185,7 @@ export const EventCatalogMFE: React.FC = () => {
                   date={evt.date}
                   location={evt.location}
                   price={evt.price}
+                  currency={evt.currency}
                   images={evt.images}
                   category={evt.category}
                   organization={evt.organization}

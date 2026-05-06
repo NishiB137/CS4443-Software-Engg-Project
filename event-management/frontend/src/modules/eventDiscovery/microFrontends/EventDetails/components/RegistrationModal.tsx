@@ -20,6 +20,7 @@ interface Props {
   registrationFields: RegistrationField[]; // From the event's registrationFields
   ticketTier?: string;
   ticketPrice?: number;
+  currencySymbol?: string;
   isFree?: boolean;
   onSuccess: (email: string) => void;
 }
@@ -38,12 +39,29 @@ const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
   }
 };
 
+// ─── Field-level validators ───────────────────────────────────────────────────
+const validateField = (key: string, value: string, fieldType: string, required: boolean): string | null => {
+  if (required && !value.trim()) return 'This field is required.';
+  if (!value.trim()) return null;
+  if (fieldType === 'email') {
+    const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRx.test(value.trim())) return 'Please enter a valid email address.';
+  }
+  if (fieldType === 'phone') {
+    const cleaned = value.replace(/[\s\-+]/g, '');
+    if (!/^\d{7,15}$/.test(cleaned)) return 'Phone must contain 7–15 digits (+ and - allowed).';
+  }
+  return null;
+};
+
 // ─── Step 1: Registration fields form ─────────────────────────────────────────
 const DetailsStep: React.FC<{
   registrationFields: RegistrationField[];
   form: Record<string, string>;
   setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-}> = ({ registrationFields, form, setForm }) => {
+  fieldErrors: Record<string, string>;
+  setFieldErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}> = ({ registrationFields, form, setForm, fieldErrors, setFieldErrors }) => {
   const sortedFields = [...registrationFields].sort((a, b) => {
     const cA = (a.categoryOrder ?? 0);
     const cB = (b.categoryOrder ?? 0);
@@ -52,7 +70,13 @@ const DetailsStep: React.FC<{
 
   const categories = Array.from(new Set(sortedFields.map(f => f.category || 'Contact Info')));
 
-  const inputCls = 'w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-white hover:border-gray-300';
+  const inputCls = (hasErr: boolean) =>
+    `w-full border-2 ${hasErr ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10' : 'border-gray-200 focus:border-blue-500 focus:ring-blue-500/10'} rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-4 transition-all bg-white hover:border-gray-300`;
+
+  const handleBlurValidate = (key: string, value: string, fieldType: string, required: boolean) => {
+    const err = validateField(key, value, fieldType, required);
+    setFieldErrors(prev => ({ ...prev, [key]: err ?? '' }));
+  };
 
   return (
     <div className="space-y-6">
@@ -66,58 +90,72 @@ const DetailsStep: React.FC<{
               {catName}
             </h3>
             <div className="flex flex-col gap-5">
-              {fields.map(field => (
-                <div key={field.key}>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    {field.label} {field.required && <span className="text-red-500">*</span>}
-                  </label>
-                  {field.fieldType === 'textarea' ? (
-                    <textarea
-                      required={field.required}
-                      placeholder={`Enter your ${field.label.toLowerCase()}…`}
-                      value={form[field.key] || ''}
-                      onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
-                      className={`${inputCls} min-h-[100px]`}
-                    />
-                  ) : field.fieldType === 'select' ? (
-                    <select
-                      required={field.required}
-                      value={form[field.key] || ''}
-                      onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
-                      className={`${inputCls} appearance-none`}
-                    >
-                      <option value="">Select an option…</option>
-                      {field.options?.map((opt: string) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  ) : field.fieldType === 'phone' ? (
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      required={field.required}
-                      placeholder="e.g. +91-9876543210"
-                      value={form[field.key] || ''}
-                      onChange={e => {
-                        // Strip non-allowed chars on paste too
-                        const cleaned = e.target.value.replace(/[^\d\-+\s]/g, '');
-                        setForm(f => ({ ...f, [field.key]: cleaned }));
-                      }}
-                      onKeyDown={handlePhoneKeyDown}
-                      className={inputCls}
-                    />
-                  ) : (
-                    <input
-                      type={field.fieldType}
-                      required={field.required}
-                      placeholder={`Enter your ${field.label.toLowerCase()}…`}
-                      value={form[field.key] || ''}
-                      onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
-                      className={inputCls}
-                    />
-                  )}
-                </div>
-              ))}
+              {fields.map(field => {
+                const hasErr = !!fieldErrors[field.key];
+                return (
+                  <div key={field.key}>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      {field.label} {field.required && <span className="text-red-500">*</span>}
+                    </label>
+                    {field.fieldType === 'textarea' ? (
+                      <textarea
+                        required={field.required}
+                        placeholder={`Enter your ${field.label.toLowerCase()}…`}
+                        value={form[field.key] || ''}
+                        onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
+                        onBlur={e => handleBlurValidate(field.key, e.target.value, field.fieldType, field.required)}
+                        className={`${inputCls(hasErr)} min-h-[100px]`}
+                      />
+                    ) : field.fieldType === 'select' ? (
+                      <select
+                        required={field.required}
+                        value={form[field.key] || ''}
+                        onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
+                        onBlur={e => handleBlurValidate(field.key, e.target.value, field.fieldType, field.required)}
+                        className={`${inputCls(hasErr)} appearance-none`}
+                      >
+                        <option value="">Select an option…</option>
+                        {field.options?.map((opt: string) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    ) : field.fieldType === 'phone' ? (
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        required={field.required}
+                        placeholder="e.g. +91-9876543210"
+                        value={form[field.key] || ''}
+                        onChange={e => {
+                          const cleaned = e.target.value.replace(/[^\d\-+\s]/g, '');
+                          setForm(f => ({ ...f, [field.key]: cleaned }));
+                        }}
+                        onBlur={e => handleBlurValidate(field.key, e.target.value, field.fieldType, field.required)}
+                        onKeyDown={handlePhoneKeyDown}
+                        className={inputCls(hasErr)}
+                      />
+                    ) : (
+                      <input
+                        type={field.fieldType}
+                        required={field.required}
+                        placeholder={`Enter your ${field.label.toLowerCase()}…`}
+                        value={form[field.key] || ''}
+                        onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
+                        onBlur={e => handleBlurValidate(field.key, e.target.value, field.fieldType, field.required)}
+                        className={inputCls(hasErr)}
+                      />
+                    )}
+                    {hasErr && (
+                      <p className="mt-1 text-xs text-red-600 font-medium flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                        </svg>
+                        {fieldErrors[field.key]}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -130,13 +168,15 @@ const DetailsStep: React.FC<{
 const PaymentStep: React.FC<{
   tierName?: string;
   price: number;
+  currencySymbol?: string;
   onPay: () => void;
   paying: boolean;
-}> = ({ tierName, price, onPay, paying }) => {
+}> = ({ tierName, price, currencySymbol = '$', onPay, paying }) => {
   const [cardNum, setCardNum] = useState('');
   const [expiry, setExpiry]   = useState('');
   const [cvv, setCvv]         = useState('');
   const [name, setName]       = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const formatCard = (v: string) => v.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
   const formatExpiry = (v: string) => {
@@ -151,15 +191,21 @@ const PaymentStep: React.FC<{
       {/* Price summary */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl p-5">
         <p className="text-sm font-medium opacity-80 mb-1">Ticket: {tierName || 'General Admission'}</p>
-        <p className="text-3xl font-extrabold">${price.toFixed(2)}</p>
+        <p className="text-3xl font-extrabold">{currencySymbol}{price}</p>
         <p className="text-xs opacity-70 mt-1">One-time payment · Secure checkout</p>
       </div>
 
       {/* Mock card form */}
-      <div className="bg-white p-5 border border-gray-200 rounded-2xl shadow-sm space-y-4">
+      <form onSubmit={(e) => { e.preventDefault(); if(cardNum.length >= 19 && expiry.length === 5 && cvv.length >= 3 && name) { setValidationError(null); onPay(); } else { setValidationError('Please complete all 16 digits of the card number, expiry, CVV, and name.'); } }} className="bg-white p-5 border border-gray-200 rounded-2xl shadow-sm space-y-4">
         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest border-b border-gray-100 pb-3">
           Card Details
         </h3>
+        
+        {validationError && (
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg font-medium border border-red-100">
+            {validationError}
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-2">Card Number</label>
@@ -205,13 +251,14 @@ const PaymentStep: React.FC<{
           <label className="block text-sm font-bold text-gray-700 mb-2">Name on Card</label>
           <input
             type="text"
+            required
             placeholder="John Doe"
             value={name}
             onChange={e => setName(e.target.value)}
             className={inputCls}
           />
         </div>
-      </div>
+      </form>
 
       <p className="text-xs text-center text-gray-400 flex items-center justify-center gap-1.5">
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -222,7 +269,14 @@ const PaymentStep: React.FC<{
 
       <button
         type="button"
-        onClick={onPay}
+        onClick={() => {
+          if (cardNum.length >= 19 && expiry.length === 5 && cvv.length >= 3 && name.trim()) {
+            setValidationError(null);
+            onPay();
+          } else {
+            setValidationError('Please complete all 16 digits of the card number, expiry, CVV, and name.');
+          }
+        }}
         disabled={paying}
         className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-black transition-all shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center justify-center gap-2"
       >
@@ -236,7 +290,7 @@ const PaymentStep: React.FC<{
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 21Z" />
             </svg>
-            Pay ${price.toFixed(2)}
+            Pay {currencySymbol}{price}
           </>
         )}
       </button>
@@ -301,7 +355,7 @@ const ResultStep: React.FC<{
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 export const RegistrationModal: React.FC<Props> = ({
-  isOpen, onClose, eventId, registrationFields, ticketTier, ticketPrice = 0, isFree = true, onSuccess,
+  isOpen, onClose, eventId, registrationFields, ticketTier, ticketPrice = 0, currencySymbol = '$', isFree = true, onSuccess,
 }) => {
   const navigate = useNavigate();
 
@@ -310,23 +364,29 @@ export const RegistrationModal: React.FC<Props> = ({
     ? registrationFields
     : DEFAULT_FIELDS;
 
-  // Steps: for paid events → 0=details, 1=payment, 2=result; for free → 0=details only
+  // Steps: for paid events → 0=details, 1=payment, 2=result; for free → 0=details, 1=result
   const isPaid = !isFree && ticketPrice > 0;
-  const STEPS = isPaid ? ['Details', 'Payment', 'Result'] : ['Details'];
+  const STEPS = isPaid ? ['Details', 'Payment', 'Result'] : ['Details', 'Result'];
 
   const [step, setStep]         = useState(0);
   const [form, setForm]         = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading]   = useState(false);
   const [paying, setPaying]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [payResult, setPayResult] = useState<boolean | null>(null);
 
-  // Initialize form with logged-in user email if available
+  // Initialize form with logged-in user details if available
   React.useEffect(() => {
-    const savedEmail = localStorage.getItem('user_email');
-    if (savedEmail) {
-      setForm(prev => ({ ...prev, attendeeEmail: savedEmail }));
-    }
+    const savedEmail = localStorage.getItem('userEmail');
+    const savedName = localStorage.getItem('userName');
+    
+    setForm(prev => {
+      const newForm = { ...prev };
+      if (savedEmail) newForm.attendeeEmail = savedEmail;
+      if (savedName) newForm.attendeeName = savedName;
+      return newForm;
+    });
   }, []);
 
   const handleClose = () => {
@@ -341,6 +401,17 @@ export const RegistrationModal: React.FC<Props> = ({
   const handleDetailsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // Run client-side validation on all fields
+    const newErrors: Record<string, string> = {};
+    for (const f of effectiveFields) {
+      const err = validateField(f.key, form[f.key] || '', f.fieldType, f.required);
+      if (err) newErrors[f.key] = err;
+    }
+    if (Object.keys(newErrors).length > 0) {
+      setFieldErrors(newErrors);
+      return;
+    }
 
     if (isPaid) {
       // Move to payment step
@@ -367,10 +438,20 @@ export const RegistrationModal: React.FC<Props> = ({
         ticketTier: ticketTier || 'General',
         formResponses,
       };
-      await registrationApi.register(eventId, payload);
-      onSuccess(attendeeEmail);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      const res = await registrationApi.register(eventId, payload);
+      if (res.newAccount) {
+        localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('userId', res.newAccount._id);
+        localStorage.setItem('username', res.newAccount.username);
+        localStorage.setItem('userEmail', res.newAccount.email);
+        localStorage.setItem('userName', res.newAccount.name);
+        localStorage.setItem('userRole', 'attendee');
+        window.dispatchEvent(new Event('storage'));
+      }
+      setPayResult(true);
+      setStep(1);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -404,12 +485,20 @@ export const RegistrationModal: React.FC<Props> = ({
           ticketTier: ticketTier || 'General',
           formResponses,
         };
-        await registrationApi.register(eventId, payload);
+        const res = await registrationApi.register(eventId, payload);
+        if (res.newAccount) {
+          localStorage.setItem('isLoggedIn', 'true');
+          localStorage.setItem('userId', res.newAccount._id);
+          localStorage.setItem('username', res.newAccount.username);
+          localStorage.setItem('userEmail', res.newAccount.email);
+          localStorage.setItem('userName', res.newAccount.name);
+          localStorage.setItem('userRole', 'attendee');
+          window.dispatchEvent(new Event('storage'));
+        }
         setPayResult(true);
         setStep(2);
-      } catch {
-        setPayResult(false);
-        setStep(2);
+      } catch (err: any) {
+        setError(err.message || 'Registration failed. Please try again.');
       }
     } else {
       setPayResult(false);
@@ -436,7 +525,7 @@ export const RegistrationModal: React.FC<Props> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
                 </svg>
                 {ticketTier}
-                {isPaid && ` · $${ticketPrice.toFixed(2)}`}
+                {isPaid && ` · ${currencySymbol}${ticketPrice}`}
               </p>
             )}
           </div>
@@ -473,7 +562,13 @@ export const RegistrationModal: React.FC<Props> = ({
 
           {step === 0 && (
             <form id="registration-form" onSubmit={handleDetailsSubmit}>
-              <DetailsStep registrationFields={effectiveFields} form={form} setForm={setForm} />
+              <DetailsStep
+                registrationFields={effectiveFields}
+                form={form}
+                setForm={setForm}
+                fieldErrors={fieldErrors}
+                setFieldErrors={setFieldErrors}
+              />
             </form>
           )}
 
@@ -481,12 +576,13 @@ export const RegistrationModal: React.FC<Props> = ({
             <PaymentStep
               tierName={ticketTier}
               price={ticketPrice}
+              currencySymbol={currencySymbol}
               onPay={handlePay}
               paying={paying}
             />
           )}
 
-          {step === 2 && (
+          {((step === 2 && isPaid) || (step === 1 && !isPaid)) && (
             <ResultStep
               success={payResult === true}
               onRetry={() => setStep(1)}

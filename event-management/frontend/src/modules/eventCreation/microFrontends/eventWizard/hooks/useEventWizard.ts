@@ -20,7 +20,8 @@ const INITIAL_DATA: EventFormData = {
   videoUrl: '',
   eventType: 'other',
   format: 'physical',
-  isFree: true,
+  isPaid: false,
+  currency: 'INR',
   tags: [],
   notes: '',
   startDate: '',
@@ -39,6 +40,13 @@ const INITIAL_DATA: EventFormData = {
   visibility: 'public',
   requiresRegistration: false,
   registrationFields: [],
+  entrySettings: {
+    enableAttendanceManagement: true,
+    scannerType: 'qr' as 'qr' | 'none',
+    requireSpecificTime: false,
+    entryStartTime: '',
+    entryEndTime: '',
+  },
   policies: { refundPolicy: '', cancellationPolicy: '', attendeeMinAge: '0' },
   organizerName: '',
   pocDetails: { name: '', email: '', phone: '' },
@@ -46,7 +54,11 @@ const INITIAL_DATA: EventFormData = {
   faqs: [],
   sessions: [],
   submitAs: 'draft',
+  team: [],
+  requiresReview: false,
+  reviewerId: '',
 };
+
 
 // ─── Safe ISO conversion ──────────────────────────────────────────────────────
 const safeISO = (date: string, time: string): string | null => {
@@ -115,7 +127,8 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
           eventType: isStandardType ? activeType : 'other',
           customEventType: isStandardType ? '' : activeType,
           format: initialEventData.format || 'physical',
-          isFree: initialEventData.isFree ?? true,
+          isPaid: initialEventData.isFree === false,
+          currency: initialEventData.currency || 'INR',
           tags: initialEventData.tags?.map((t) => typeof t === 'string' ? t : t._id) || [],
           notes: initialEventData.notes || '',
           startDate: startParsed.date,
@@ -135,6 +148,15 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
           visibility: (initialEventData.visibility === 'restricted' ? 'public' : (initialEventData.visibility || 'public')) as 'public' | 'hidden_link' | 'hidden_authenticated',
           requiresRegistration: (initialEventData as any).requiresRegistration === true,
           registrationFields: (initialEventData as any).registrationFields || [],
+          // ✓ KEY FIX: persist ticketing tiers on edit/duplicate
+          ticketingTiers: (initialEventData as any).ticketingTiers || [],
+          entrySettings: {
+            enableAttendanceManagement: (initialEventData as any).entrySettings?.enableAttendanceManagement ?? true,
+            scannerType: ((initialEventData as any).entrySettings?.scannerType || 'qr') as 'qr' | 'none',
+            requireSpecificTime: (initialEventData as any).entrySettings?.requireSpecificTime || false,
+            entryStartTime: (initialEventData as any).entrySettings?.entryStartTime || '',
+            entryEndTime: (initialEventData as any).entrySettings?.entryEndTime || '',
+          },
           policies: {
             refundPolicy: (initialEventData.policies?.['refundPolicy'] as 'full' | 'partial' | 'no_refund' | '') || 'no_refund',
             cancellationPolicy: (initialEventData.policies?.['cancellationPolicy'] as string) || '',
@@ -154,6 +176,19 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
               String(f.value ?? '')
             ])
           ),
+          team: ((initialEventData as any).team || []).map((m: any) => ({
+            _id: typeof m.user === 'object' ? m.user._id || m.user : m.user,
+            username: typeof m.user === 'object' ? (m.user.username || '') : (m.username || ''),
+            name: typeof m.user === 'object' ? (m.user.name || '') : (m.name || ''),
+            email: typeof m.user === 'object' ? (m.user.email || '') : (m.email || ''),
+            role: m.role || 'event_manager',
+          })),
+          requiresReview: (initialEventData as any).requiresReview ?? false,
+          reviewerId: (() => {
+            const rev = (initialEventData as any).reviewer;
+            if (!rev) return '';
+            return typeof rev === 'object' ? (rev._id || '') : rev;
+          })(),
           sessions: (initialEventData.sessions as Array<Record<string, unknown>>)?.map((s) => {
             const sStart = parseIsoToLocal(s.startTime as string | undefined);
             const sEnd = parseIsoToLocal(s.endTime as string | undefined);
@@ -167,6 +202,7 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
               endDate: sEnd.date,
               endTime: sEnd.time,
               room: (s.room as string) || '',
+              timezone: (s.timezone as string) || 'Asia/Kolkata',
               streamUrl: (s.streamUrl as string) || '',
               maxAttendees: s.maxAttendees != null ? String(s.maxAttendees) : '',
               speakers: (s.speakers as SessionFormData['speakers']) || [],
@@ -195,6 +231,13 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
             templateFields: mergeSystemFields(tpl.fields || []),
             sessionTemplates: tpl.sessionTemplates || [],
             templateLayout: tpl.layout,
+            // Pre-populate ticketing tiers and registration fields from template when editing
+            ticketingTiers: prev.ticketingTiers.length === 0 && tpl.defaultTicketingTiers?.length
+              ? tpl.defaultTicketingTiers
+              : prev.ticketingTiers,
+            registrationFields: prev.registrationFields.length === 0 && tpl.defaultRegistrationFields?.length
+              ? tpl.defaultRegistrationFields
+              : prev.registrationFields,
           }));
         }).catch(() => {
           // ignore error, just won't render fields
@@ -220,15 +263,17 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
       // Always add a dedicated Registration step after Visibility
       s.push({ id: 'registration', title: 'Registration', type: 'registration' });
       // Add Ticketing Tiers step only for paid events
-      if (!formData.isFree) {
+      const eventIsPaid = formData.isPaid === true || String(formData.isPaid) === 'true';
+      if (eventIsPaid) {
         s.push({ id: 'ticketingTiers', title: 'Ticketing Tiers', type: 'ticketingTiers' });
       }
       s.push({ id: 'sessions', title: 'Sessions', type: 'sessions' });
       s.push({ id: 'faq', title: 'FAQs', type: 'faq' });
+      s.push({ id: 'team_review', title: 'Team & Review', type: 'team_review' });
       s.push({ id: 'review', title: 'Review & Publish', type: 'review' });
     }
     return s;
-  }, [formData.template, formData.templateFields, formData.isFree]);
+  }, [formData.template, formData.templateFields, formData.isPaid]);
   
   const totalSteps = steps.length;
 
@@ -238,7 +283,22 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
 
   const updateFormData = (patch: Partial<EventFormData>) => {
     setIsDirty(true);
-    setFormData((prev: EventFormData) => ({ ...prev, ...patch }));
+    setFormData((prev: EventFormData) => {
+      const next = { ...prev, ...patch };
+      // ── Enforce: paid events must always have registration enabled ──
+      const isPaid = next.isPaid === true || String(next.isPaid) === 'true';
+      if (isPaid && !next.requiresRegistration) {
+        next.requiresRegistration = true;
+        // Ensure attendeeName and attendeeEmail are always in the fields for paid events
+        const hasName  = next.registrationFields.some(f => f.key === 'attendeeName');
+        const hasEmail = next.registrationFields.some(f => f.key === 'attendeeEmail');
+        if (!hasName)
+          next.registrationFields = [{ key: 'attendeeName', label: 'Full Name', fieldType: 'text' as const, required: true, order: 0, category: 'Contact Info', categoryOrder: 0 } as any, ...next.registrationFields];
+        if (!hasEmail)
+          next.registrationFields = [...next.registrationFields, { key: 'attendeeEmail', label: 'Email Address', fieldType: 'email' as const, required: true, order: 1, category: 'Contact Info', categoryOrder: 0 } as any];
+      }
+      return next;
+    });
     const updatedKeys = Object.keys(patch);
     setStepErrors((prev: StepErrors) => {
       const next = { ...prev };
@@ -246,6 +306,7 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
       return next;
     });
   };
+
 
   const nextStep = () => {
     const currentStepDef = steps[currentStep - 1];
@@ -267,9 +328,22 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
   const submitEvent = async (asDraft = false) => {
     // When editing a published event and saving as draft → demote to draft status
     // When editing a published event and clicking "Save Changes" → keep published status
+    // Otherwise: submit for review (approval workflow)
     const isEditingPublished = !!eventId && originalStatus === 'published';
 
-    const targetStatus = asDraft ? 'draft' : (isEditingPublished ? 'published' : 'published');
+    const currentUserId = localStorage.getItem('userId');
+    const isReviewerApproving = !!eventId && originalStatus === 'review' && formData.reviewerId === currentUserId;
+
+    // Determine target status based on review settings
+    const targetStatus = asDraft
+      ? 'draft'
+      : isEditingPublished
+        ? 'published'
+        : isReviewerApproving
+          ? 'approved'
+          : formData.requiresReview && formData.reviewerId
+            ? 'review'
+            : 'published';
     updateFormData({ submitAs: targetStatus });
 
     // ── Run validator conditionally ──────────────────────
@@ -309,6 +383,7 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
 
     try {
       // ── Build payload ────────────────────────────────────────────────────
+      const userId = localStorage.getItem('userId');
       const payload = {
         title:            formData.title.trim(),
         shortDescription: formData.shortDescription.trim() || undefined,
@@ -318,7 +393,8 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
         media:            { videoUrl: formData.videoUrl.trim() || undefined },
         eventType:        formData.eventType === 'other' && formData.customEventType ? formData.customEventType.trim() : formData.eventType,
         format:           formData.format,
-        isFree:           formData.isFree,
+        isFree:           !(formData.isPaid === true || String(formData.isPaid) === 'true'),
+        currency:         formData.currency,
         tags:             formData.tags,
         notes:            formData.notes.trim() || undefined,
         startDate:        startISO || new Date().toISOString(),
@@ -326,6 +402,7 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
         timezone:         formData.timezone,
         maxCapacity:      formData.maxCapacity ? Number(formData.maxCapacity) : undefined,
         templateId:       formData.template || undefined,
+        createdBy:        userId || undefined,
         venue: formData.format !== 'virtual' ? {
           name:       formData.venue.name.trim()      || undefined,
           address:    formData.venue.address.trim()   || undefined,
@@ -345,8 +422,11 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
               categoryOrder: (f as any).categoryOrder ?? 0,
             }))
           : [],
-        ticketingTiers: !formData.isFree && formData.ticketingTiers.length > 0
-          ? formData.ticketingTiers.map(t => ({
+        entrySettings: formData.entrySettings,
+        ticketingTiers: (formData.isPaid === true || String(formData.isPaid) === 'true') && formData.ticketingTiers.length > 0
+          ? formData.ticketingTiers
+              .filter(t => t.name && t.name.trim() !== '')
+              .map(t => ({
               name: t.name.trim(),
               price: t.price,
               capacity: t.capacity,
@@ -379,6 +459,12 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
             .filter((x) => x.value !== undefined && String(x.value).trim() !== '');
           return out.length > 0 ? out : undefined;
         })(),
+        team: formData.team.length > 0
+          ? formData.team.map((m) => ({ user: m._id, role: m.role }))
+          : undefined,
+        // Review workflow
+        requiresReview: formData.requiresReview,
+        reviewer: formData.requiresReview && formData.reviewerId ? formData.reviewerId : undefined,
       };
 
       const finalPayload = {
@@ -460,7 +546,8 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
           videoUrl: formData.videoUrl,
           eventType: formData.eventType === 'other' && formData.customEventType ? formData.customEventType : formData.eventType,
           format: formData.format,
-          isFree: String(formData.isFree),
+          isPaid: String(formData.isPaid),
+          currency: formData.currency,
           startDate: formData.startDate,
           startTime: formData.startTime,
           endDate: formData.endDate,
@@ -513,7 +600,9 @@ export const useEventWizard = ({ initialEventData, eventId }: { initialEventData
         description: formData.shortDescription.trim() || undefined,
         eventType: formData.eventType === 'other' && formData.customEventType ? formData.customEventType.trim() : formData.eventType,
         format: formData.format,
-        isFree: formData.isFree,
+        isFree: !(formData.isPaid === true || String(formData.isPaid) === 'true'),
+        defaultCurrency: formData.currency,
+        defaultTicketingTiers: !(formData.isPaid === true || String(formData.isPaid) === 'true') ? [] : formData.ticketingTiers.filter(t => t.name && t.name.trim() !== ''),
         fields: mergedFields.length > 0 ? (mergedFields.map(f => ({ ...f })) as unknown as FieldSpec[]) : undefined,
         sessionTemplates: formData.sessionTemplates.length > 0 ? formData.sessionTemplates.map(s => ({ ...s, defaultFields: s.defaultFields ?? [] })) : undefined,
         layout: formData.templateLayout,

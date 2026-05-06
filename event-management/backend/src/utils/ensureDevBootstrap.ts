@@ -19,6 +19,7 @@ export async function ensureDevBootstrap(): Promise<void> {
   if (!existingUser) {
     await User.create({
       _id: userId,
+      username: 'devuser',
       name: 'Dev User',
       email: 'dev@eventa.local',
       role: 'organizer',

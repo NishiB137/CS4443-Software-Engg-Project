@@ -9,6 +9,7 @@ import { Step4Sessions } from '@/modules/eventCreation/microFrontends/eventWizar
 import { Step5Faq } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step5Faq';
 import { Step4Review } from '@/modules/eventCreation/microFrontends/eventWizard/components/Step4Review';
 import { TicketingTiersStep } from '@/modules/eventCreation/microFrontends/eventWizard/components/TicketingTiersStep';
+import { StepTeamReview } from '@/modules/eventCreation/microFrontends/eventWizard/components/StepTeamReview';
 
 import type { ApiEvent } from '@/services/api';
 
@@ -57,6 +58,7 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
       case 'ticketingTiers': return <TicketingTiersStep {...props} />;
       case 'sessions': return <Step4Sessions {...props} />;
       case 'faq': return <Step5Faq {...props} />;
+      case 'team_review': return <StepTeamReview {...props} />;
       case 'review': return <Step4Review {...props} />;
       default: return null;
     }
@@ -168,20 +170,20 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
             Save as Template
           </button>
 
-          <button
-            onClick={() => submitEvent(true)}
-            disabled={isSubmitting}
-            className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition disabled:opacity-50 text-sm flex items-center gap-2"
-          >
-            {isSubmitting && formData.submitAs === 'draft' && (
-              <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span>
-            )}
-            {isSubmitting && formData.submitAs === 'draft'
-              ? 'Saving...'
-              : isEditingPublished
-              ? 'Save Changes as Draft'
-              : 'Save as Draft'}
-          </button>
+          {!isEditingPublished && (
+            <button
+              onClick={() => submitEvent(true)}
+              disabled={isSubmitting}
+              className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition disabled:opacity-50 text-sm flex items-center gap-2"
+            >
+              {isSubmitting && formData.submitAs === 'draft' && (
+                <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span>
+              )}
+              {isSubmitting && formData.submitAs === 'draft'
+                ? 'Saving...'
+                : 'Save as Draft'}
+            </button>
+          )}
 
           {currentStep < totalSteps ? (
             <button
@@ -198,7 +200,7 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
               onClick={() => submitEvent(false)}
               disabled={isSubmitting}
               className={`px-8 py-2.5 text-white rounded-lg font-bold transition shadow-md disabled:opacity-60 text-sm flex items-center gap-2 ${
-                isEditingPublished ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'
+                isEditingPublished ? 'bg-blue-600 hover:bg-blue-700' : 'bg-violet-600 hover:bg-violet-700'
               }`}
             >
               {isSubmitting && formData.submitAs !== 'draft' ? (
@@ -207,14 +209,18 @@ export const EventWizardMFE: React.FC<{ initialEventData?: ApiEvent | null; even
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
-                  {isEditingPublished ? 'Saving...' : 'Publishing...'}
+                  {isEditingPublished ? 'Saving...' : 'Submitting...'}
                 </>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                   </svg>
-                  {isEditingPublished ? 'Save & Keep Published' : 'Publish Event'}
+                  {isEditingPublished 
+                    ? 'Save & Keep Published' 
+                    : (!!eventId && originalStatus === 'review' && formData.reviewerId === localStorage.getItem('userId'))
+                      ? 'Approve Event'
+                      : (formData.requiresReview && formData.reviewerId ? 'Submit for Review' : 'Publish Event')}
                 </>
               )}
             </button>

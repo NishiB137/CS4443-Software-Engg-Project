@@ -1,17 +1,57 @@
 import React, { useEffect, useState } from 'react';
 import { registrationApi, type ApiRegistration } from '../../../services/api';
 import { LoginRequiredModal } from '@/shared/components/LoginRequiredModal';
-
+import { QRCodeSVG } from 'qrcode.react';
 export const AttendeeBookingsPage: React.FC = () => {
   const [registrations, setRegistrations] = useState<ApiRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [email, setEmail] = useState<string>('');
   const [pendingLogin, setPendingLogin] = useState(false);
+  const [selectedQR, setSelectedQR] = useState<{ token: string; title: string, tier: string, scannerType?: string } | null>(null);
+
+  const downloadTicket = () => {
+    const svgElement = document.querySelector('#ticket-code-container svg') as SVGSVGElement | null;
+    if (!svgElement) return;
+
+    // Convert SVG to PNG using a canvas
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    // Create base64 encoded SVG safely
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    
+    img.onload = () => {
+      // Create explicit margin padding so that ZXing never clips the boundary squares
+      const padding = 20;
+      const baseWidth = svgElement.clientWidth || img.width || 300;
+      const baseHeight = svgElement.clientHeight || img.height || 300;
+      
+      canvas.width = baseWidth + (padding * 2);
+      canvas.height = baseHeight + (padding * 2);
+      
+      if (ctx) {
+        // Draw the pure white backdrop spanning the whole padded area
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the QR Code perfectly centered with buffer space around it
+        ctx.drawImage(img, padding, padding, baseWidth, baseHeight);
+        
+        const pngUrl = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.href = pngUrl;
+        downloadLink.download = `${selectedQR?.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_ticket.png`;
+        downloadLink.click();
+      }
+    };
+  };
 
   useEffect(() => {
     const handleStorage = () => {
-      const saved = localStorage.getItem('user_email');
+      const saved = localStorage.getItem('userEmail');
       if (saved) {
         setEmail(saved);
         setPendingLogin(false);
@@ -87,11 +127,24 @@ export const AttendeeBookingsPage: React.FC = () => {
             <span className="px-3 py-1 bg-green-500/10 text-green-600 rounded-full text-xs font-bold uppercase">{reg.status}</span>
           </div>
         </div>
-        <div className="flex items-center">
-          <button onClick={() => window.location.href = `/event?id=${event._id}`} className="px-4 py-2 border border-primary text-primary hover:bg-primary-light rounded-lg font-bold transition">
-            View Event
-          </button>
-        </div>
+          <div className="flex flex-col gap-2">
+            {(reg as any).qrToken && (
+              <button 
+                onClick={() => setSelectedQR({ 
+                  token: (reg as any).qrToken, 
+                  title: event.title, 
+                  tier: reg.ticketTier,
+                  scannerType: (event as any).entrySettings?.scannerType || 'qr'
+                })} 
+                className="px-4 py-2 bg-primary text-surface font-bold rounded-lg hover:bg-primary-hover shadow-sm transition"
+              >
+                View Ticket
+              </button>
+            )}
+            <button onClick={() => window.location.href = `/event?id=${event._id}`} className="px-4 py-2 border border-primary text-primary hover:bg-primary-light rounded-lg font-bold transition">
+              View Event
+            </button>
+          </div>
       </div>
     );
   };
@@ -147,6 +200,42 @@ export const AttendeeBookingsPage: React.FC = () => {
             </div>
           )}
         </section>
+      )}
+
+      {selectedQR && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-8 relative flex flex-col items-center">
+            <button 
+              onClick={() => setSelectedQR(null)}
+              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-800 bg-gray-100 rounded-full transition"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <h3 className="text-xl font-bold text-gray-900 mb-1 text-center">{selectedQR.title}</h3>
+            <span className="text-xs font-bold px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full uppercase tracking-wider mb-6">
+              {selectedQR.tier} TICKET
+            </span>
+            
+            <div id="ticket-code-container" className="p-4 bg-white border-4 border-gray-100 rounded-2xl shadow-sm mb-4 w-full max-w-xs mx-auto flex justify-center">
+              <QRCodeSVG value={selectedQR.token} size={240} level="M" includeMargin={true} />
+            </div>
+            
+            <div className="flex flex-col gap-2 w-full mt-2">
+              <button 
+                onClick={downloadTicket}
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Download Ticket
+              </button>
+              <p className="text-sm text-center text-gray-500 font-medium">Have this ready for scanning at entry.</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

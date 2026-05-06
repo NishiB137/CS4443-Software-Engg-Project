@@ -1,5 +1,6 @@
 import { EventTemplate } from '../models/EventTemplate.js';
 import type { IFieldSpec, ISessionTemplate } from '../models/EventTemplate.js';
+import mongoose from 'mongoose';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -50,6 +51,11 @@ interface TemplateBody {
   defaultVisibility?: string;
   defaultStatus?: string;
   defaultPolicies?: Record<string, unknown>;
+  defaultCurrency?: string;
+  defaultTicketingTiers?: Array<{ name: string; price: number; capacity: number; duration?: string; description?: string }>;
+  requiresRegistration?: boolean;
+  defaultRegistrationFields?: Array<{ key: string; label: string; fieldType: 'text' | 'email' | 'phone' | 'textarea' | 'select'; required: boolean; options?: string[]; category?: string; categoryOrder?: number; order?: number; }>;
+  defaultEntrySettings?: { enableAttendanceManagement: boolean; scannerType: 'qr' | 'none'; allowMultipleScans: boolean; requireSpecificTime: boolean; entryStartTime?: Date; entryEndTime?: Date; };
   allowsSubEvents?: boolean;
   maxSubEventDepth?: number;
   createdBy?: string;
@@ -126,8 +132,16 @@ export const listTemplates = async (filters: {
   if (filters.eventType) query['eventType'] = filters.eventType;
   if (filters.format) query['format'] = filters.format;
   if (filters.tag) query['tags'] = filters.tag;
-  if (filters.organization) query['organization'] = filters.organization;
-  if (filters.createdBy) query['createdBy'] = filters.createdBy;
+  if (filters.organization && mongoose.Types.ObjectId.isValid(filters.organization)) {
+    query['organization'] = filters.organization;
+  }
+  if (filters.createdBy) {
+    if (mongoose.Types.ObjectId.isValid(filters.createdBy)) {
+      query['createdBy'] = filters.createdBy;
+    } else {
+      query['createdBy'] = new mongoose.Types.ObjectId();
+    }
+  }
 
   if (filters.q && filters.q.trim()) {
     const q = filters.q.trim();
@@ -219,6 +233,11 @@ export const createTemplate = async (body: TemplateBody) => {
     defaultVisibility: body.defaultVisibility || 'public',
     defaultStatus:     body.defaultStatus     || 'draft',
     defaultPolicies:   body.defaultPolicies   || {},
+    defaultCurrency:   body.defaultCurrency   || 'INR',
+    defaultTicketingTiers: body.defaultTicketingTiers || [],
+    requiresRegistration: body.requiresRegistration ?? false,
+    defaultRegistrationFields: body.defaultRegistrationFields || [],
+    ...(body.defaultEntrySettings ? { defaultEntrySettings: body.defaultEntrySettings } : {}),
     allowsSubEvents:   body.allowsSubEvents   ?? true,
     maxSubEventDepth:  body.maxSubEventDepth  ?? 1,
     ...(body.createdBy ? { createdBy: body.createdBy } : {}),
@@ -240,7 +259,7 @@ export const updateTemplate = async (id: string, body: TemplateBody) => {
   validateBody(body, false);
 
   const update: Record<string, unknown> = {};
-  const allowed = ['name','description','eventType','format','isFree','coverColor','tags','fields','sessionTemplates','layout','defaultVisibility','defaultStatus','defaultPolicies','allowsSubEvents','maxSubEventDepth'];
+  const allowed = ['name','description','eventType','format','isFree','coverColor','tags','fields','sessionTemplates','layout','defaultVisibility','defaultStatus','defaultPolicies','defaultCurrency','defaultTicketingTiers','requiresRegistration','defaultRegistrationFields','defaultEntrySettings','allowsSubEvents','maxSubEventDepth'];
   for (const key of allowed) {
     if (body[key as keyof TemplateBody] !== undefined) update[key] = body[key as keyof TemplateBody];
   }

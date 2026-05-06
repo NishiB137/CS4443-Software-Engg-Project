@@ -56,6 +56,13 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
       attendeeMinAge: 0,
       cancellationPolicy: 'Cancellations are handled by the organizer. Please contact the organizer for changes or refunds.',
     },
+    requiresRegistration: false,
+    defaultEntrySettings: {
+      enableAttendanceManagement: false,
+      scannerType: 'none',
+      allowMultipleScans: false,
+      requireSpecificTime: false,
+    },
     allowsSubEvents: true,
     maxSubEventDepth: 1,
     layout: undefined,
@@ -69,9 +76,17 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
         navigate(`/templates/${templateId}`, { replace: true });
         return;
       }
-      const mergedFields = mergeSystemFields((res.data.fields || []) as FieldSpec[]);
-      const derivedLayout = ensurePoliciesCategory(res.data.layout ?? deriveLayoutFromFields(mergedFields));
-      setForm({ ...res.data, fields: mergedFields, layout: derivedLayout });
+      const rawFields = (res.data.fields || []) as FieldSpec[];
+      const safeFields = rawFields.filter(f => f.form !== 'Registration');
+      const mergedFields = mergeSystemFields(safeFields);
+      
+      const regFieldsFromApi = (res.data.defaultRegistrationFields || []).map(f => ({
+          ...f, section: 'custom', form: 'Registration', formOrder: 2
+      })) as FieldSpec[];
+      const combinedFields = [...mergedFields, ...regFieldsFromApi];
+
+      const derivedLayout = ensurePoliciesCategory(res.data.layout ?? deriveLayoutFromFields(combinedFields));
+      setForm({ ...res.data, fields: combinedFields, layout: derivedLayout });
     }).catch((e) => setLoadError(e.message));
   }, [templateId, readOnly, navigate]);
 
@@ -104,7 +119,20 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
         cancellationPolicy: fields.find((f) => f.key === 'cancellationPolicy')?.defaultValue || form.defaultPolicies?.cancellationPolicy || '',
         attendeeMinAge: Number(fields.find((f) => f.key === 'attendeeMinAge')?.defaultValue ?? form.defaultPolicies?.attendeeMinAge ?? 0),
       };
-      const payload = { ...form, defaultPolicies: policyDefaults };
+
+      const normalFields = fields.filter(f => f.form !== 'Registration');
+      const regFields = fields.filter(f => f.form === 'Registration').map(f => ({
+         key: f.key, label: f.label, fieldType: f.fieldType as any, required: !!f.required,
+         options: f.options, category: f.category, categoryOrder: f.categoryOrder, order: f.order
+      }));
+
+      const payload = { 
+        ...form, 
+        defaultPolicies: policyDefaults,
+        fields: normalFields,
+        defaultRegistrationFields: regFields 
+      };
+      
       if (isEdit) {
         await templateApi.update(templateId!, payload);
       } else {
@@ -250,6 +278,85 @@ export const TemplateEditor: React.FC<Props> = ({ templateId, readOnly = false }
             </div>
 
             <div>
+              <label className={lbl}>Requires Registration?</label>
+              <div className="flex items-center mt-2">
+                <input type="checkbox" id="requiresRegistration" className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 disabled:opacity-50"
+                  checked={form.requiresRegistration || false} disabled={viewOnly || !form.isFree} 
+                  onChange={(e) => upd({ requiresRegistration: e.target.checked })} />
+                <label htmlFor="requiresRegistration" className="ml-2 text-sm text-gray-700 font-medium">Require attendees to register</label>
+              </div>
+              {!form.isFree && <p className="text-xs text-gray-500 mt-1">Paid events always require registration.</p>}
+            </div>
+
+            <div>
+              <label className={lbl}>Default Currency</label>
+              <select className={inp()} value={form.defaultCurrency || 'USD'} disabled={viewOnly || form.isFree}
+                onChange={(e) => upd({ defaultCurrency: e.target.value })}>
+                <option value="USD">USD ($)</option>
+                <option value="INR">INR (₹)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+              </select>
+            </div>
+
+            {!form.isFree && (
+              <div className="md:col-span-2">
+                <label className={lbl}>Default Ticketing Tiers</label>
+                <p className="text-xs text-gray-500 mb-2">Configure default ticketing tiers for this template. Use a price of 0 for free tiers.</p>
+                <div className="space-y-3">
+                  {(form.defaultTicketingTiers || []).map((tier, i) => (
+                    <div key={i} className="flex gap-2 items-center p-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <input type="text" className={inp()} placeholder="Tier Name" value={tier.name || ''} disabled={viewOnly}
+                        onChange={(e) => { const newTiers = [...(form.defaultTicketingTiers || [])]; newTiers[i].name = e.target.value; upd({ defaultTicketingTiers: newTiers }); }} />
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{form.defaultCurrency === 'INR' ? '₹' : form.defaultCurrency === 'EUR' ? '€' : form.defaultCurrency === 'GBP' ? '£' : '$'}</span>
+                        <input type="number" min="0" step="1" className={`${inp()} pl-7 w-24`} placeholder="Price" value={tier.price === 0 ? 0 : (tier.price || '')} disabled={viewOnly}
+                          onChange={(e) => { const newTiers = [...(form.defaultTicketingTiers || [])]; newTiers[i].price = Number(e.target.value); upd({ defaultTicketingTiers: newTiers }); }} />
+                      </div>
+                      <input type="number" min="1" className={`${inp()} w-32`} placeholder="Capacity" value={tier.capacity || ''} disabled={viewOnly}
+                        onChange={(e) => { const newTiers = [...(form.defaultTicketingTiers || [])]; newTiers[i].capacity = Number(e.target.value); upd({ defaultTicketingTiers: newTiers }); }} />
+                      {!viewOnly && (
+                        <button type="button" onClick={() => { const newTiers = [...(form.defaultTicketingTiers || [])]; newTiers.splice(i, 1); upd({ defaultTicketingTiers: newTiers }); }} className="p-2 text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 rounded-lg transition ml-auto">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {!viewOnly && (
+                    <button type="button" onClick={() => upd({ defaultTicketingTiers: [...(form.defaultTicketingTiers || []), { name: '', price: 0, capacity: 100 }] })} className="px-4 py-2 border border-blue-200 text-blue-600 bg-white rounded-lg text-sm font-medium hover:bg-blue-50 hover:border-blue-300 transition">
+                      + Add Tier
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="md:col-span-2 border-t border-gray-100 pt-5 mt-2">
+              <label className="block text-sm font-bold text-gray-800 mb-3">Entry & Attendance Settings</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <div className="flex items-center mb-1">
+                    <input type="checkbox" id="enableAttendance" className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 disabled:opacity-50"
+                      checked={form.defaultEntrySettings?.enableAttendanceManagement || false} disabled={viewOnly}
+                      onChange={(e) => upd({ defaultEntrySettings: { ...form.defaultEntrySettings, enableAttendanceManagement: e.target.checked, scannerType: form.defaultEntrySettings?.scannerType || 'none', allowMultipleScans: form.defaultEntrySettings?.allowMultipleScans || false, requireSpecificTime: form.defaultEntrySettings?.requireSpecificTime || false } })} />
+                    <label htmlFor="enableAttendance" className="ml-2 text-sm text-gray-700 font-medium">Enable Attendance Tracking</label>
+                  </div>
+                  <p className="text-xs text-gray-500 ml-6">Track check-ins and check-outs for attendees.</p>
+                </div>
+
+                <div>
+                  <label className={lbl}>Scanner Type</label>
+                  <select className={inp()} disabled={viewOnly || !form.defaultEntrySettings?.enableAttendanceManagement}
+                    value={form.defaultEntrySettings?.scannerType || 'none'}
+                    onChange={(e) => upd({ defaultEntrySettings: { ...form.defaultEntrySettings, enableAttendanceManagement: form.defaultEntrySettings?.enableAttendanceManagement || false, allowMultipleScans: form.defaultEntrySettings?.allowMultipleScans || false, requireSpecificTime: form.defaultEntrySettings?.requireSpecificTime || false, scannerType: e.target.value as 'none'|'qr' } })}>
+                    <option value="none">Manual Check-in Only</option>
+                    <option value="qr">QR Code Scanner (Tickets)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 border-t border-gray-100 pt-5 mt-2">
               <label className={lbl}>Default Visibility</label>
               <select className={inp()} value={form.defaultVisibility || 'public'} disabled={viewOnly}
                 onChange={(e) => upd({ defaultVisibility: e.target.value })}>

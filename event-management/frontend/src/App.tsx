@@ -13,10 +13,19 @@ import { AttendeeLayout } from './shared/components/AttendeeLayout';
 import { AttendeeBookmarksPage } from './modules/eventDiscovery/pages/AttendeeBookmarksPage';
 import { AttendeeBookingsPage } from './modules/eventDiscovery/pages/AttendeeBookingsPage';
 import { AttendeeTicketsPage } from './modules/eventDiscovery/pages/AttendeeTicketsPage';
+import { GlobalError } from './shared/components/GlobalError';
+import { AdminReviewPage } from './modules/eventManagement/pages/AdminReviewPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-  if (!isLoggedIn) {
+  const uname = localStorage.getItem('username');
+  const uid = localStorage.getItem('userId');
+  const isCorrupted = (!uname || uname === 'undefined' || !uid || uid === 'undefined');
+  
+  if (!isLoggedIn || isCorrupted) {
+    if (isCorrupted) {
+      ['isLoggedIn', 'userId', 'username', 'userEmail', 'userName', 'userRole'].forEach(k => localStorage.removeItem(k));
+    }
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;
@@ -26,6 +35,7 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <AttendeeLayout />,
+    errorElement: <GlobalError />,
     children: [
       { index: true, element: <LandingPage /> },
       { path: 'event', element: <EventPage /> },
@@ -42,12 +52,18 @@ const router = createBrowserRouter([
       <ProtectedRoute>
         <CreateEventPage />
       </ProtectedRoute>
-    ) 
+    ),
+    errorElement: <GlobalError />,
   },
   
   {
     path: '/organizer',
-    element: <OrganizerLayout />,
+    element: (
+      <ProtectedRoute>
+        <OrganizerLayout />
+      </ProtectedRoute>
+    ),
+    errorElement: <GlobalError />,
     children: [
       { index: true, element: <Navigate to="events" replace /> },
       { path: 'events', element: <OrganizerEventsPage /> },
@@ -56,11 +72,13 @@ const router = createBrowserRouter([
     ]
   },
 
-  { path: '/templates/new', element: <TemplateCreatePage /> },
-  { path: '/templates/:id/edit', element: <TemplateEditPage /> },
-  { path: '/templates/:id', element: <TemplateViewPage /> },
-  
-  { path: '/templates', element: <Navigate to="/organizer/templates" replace /> }
+  { path: '/templates/new', element: <ProtectedRoute><TemplateCreatePage /></ProtectedRoute>, errorElement: <GlobalError /> },
+  { path: '/templates/:id/edit', element: <ProtectedRoute><TemplateEditPage /></ProtectedRoute>, errorElement: <GlobalError /> },
+  { path: '/templates/:id', element: <ProtectedRoute><TemplateViewPage /></ProtectedRoute>, errorElement: <GlobalError /> },
+
+  { path: '/templates', element: <Navigate to="/organizer/templates" replace /> },
+
+  { path: '/admin/review', element: <ProtectedRoute><AdminReviewPage /></ProtectedRoute>, errorElement: <GlobalError /> },
 ]);
 
 function App() {

@@ -3,6 +3,9 @@ import { Session } from '../models/Session.js';
 import mongoose from 'mongoose';
 import { Tag } from '../models/Tag.js';
 import { validateSessionBody } from './sessionService.js';
+import { User } from '../models/User.js';
+import { UserEventInteraction } from '../models/UserEventInteraction.js';
+import { Registration } from '../models/Registration.js';
 
 /** UI category chips → eventType values (must match frontend UseEvents / Landing) */
 export const CATEGORY_EVENT_TYPES: Record<string, string[]> = {
@@ -155,9 +158,35 @@ const validateCreateBody = (body: CreateEventBody): void => {
     });
   }
 
+  // ── Paid events must require registration ──
+  if (body.isFree === false || body.isFree === 'false' as any || (typeof body.isFree === 'boolean' && !body.isFree)) {
+    if (!body.requiresRegistration) {
+      errors.push('Paid events must have registration enabled.');
+    }
+    // Ensure attendeeName and attendeeEmail are in registrationFields
+    const regFields = (body.registrationFields ?? []) as Array<{ key: string }>;
+    const hasName  = regFields.some(f => f.key === 'attendeeName');
+    const hasEmail = regFields.some(f => f.key === 'attendeeEmail');
+    if (!hasName || !hasEmail) {
+      errors.push('Paid events must collect at least the attendee name and email.');
+    }
+  }
+
+  // ── Ticketing Tiers Validation ──
+  if (body.ticketingTiers && body.ticketingTiers.length > 0) {
+    body.ticketingTiers.forEach((tier, i) => {
+      if (!tier.name || !String(tier.name).trim()) errors.push(`Ticket tier ${i + 1}: name is required.`);
+      if (typeof tier.price !== 'number' || tier.price < 0) errors.push(`Ticket tier ${i + 1}: price must be 0 or greater.`);
+      if (tier.capacity !== undefined && tier.capacity !== null) {
+        if (typeof tier.capacity !== 'number' || tier.capacity <= 0) errors.push(`Ticket tier ${i + 1}: capacity must be greater than 0.`);
+      }
+    });
+  }
+
   if (errors.length > 0)
     throw new Error(errors.join(' | '));
 };
+
 
 // ─── Create — atomic: validate first, then write ──────────────────────────────
 
@@ -269,6 +298,8 @@ export const getEventById = async (id: string) => {
     .populate('tags',         'name slug')
     .populate('organization', 'name slug logo')
     .populate('createdBy',    'name email avatar')
+    .populate('team.user',    'name username email')
+    .populate('reviewer',     'name username email')
     .lean();
   if (event) event.status = calculateDynamicStatus(event);
   return attachSessions(event as Record<string, unknown> | null);
@@ -279,6 +310,8 @@ export const getEventBySlug = async (slug: string) => {
     .populate('tags',         'name slug')
     .populate('organization', 'name slug logo')
     .populate('createdBy',    'name email avatar')
+    .populate('team.user',    'name username email')
+    .populate('reviewer',     'name username email')
     .lean();
   if (event) event.status = calculateDynamicStatus(event);
   return attachSessions(event as Record<string, unknown> | null);
@@ -291,6 +324,7 @@ export const listEvents = async (filters: {
   search?: string;
   organization?: string;
   createdBy?: string;
+  userRolesFor?: string;
   page?: number;
   limit?: number;
   /** Single eventType enum value */
@@ -308,7 +342,7 @@ export const listEvents = async (filters: {
 }) => {
   const {
     status, visibility = 'public', isFree, search,
-    organization, createdBy, page = 1, limit = 12,
+    organization, createdBy, userRolesFor, page = 1, limit = 12,
     eventType, category, format,
     startDateFrom, startDateTo, suitableForAge, tag,
   } = filters;
@@ -322,19 +356,58 @@ export const listEvents = async (filters: {
   if (status)       query['status']       = status;
   if (visibility && visibility !== 'all') query['visibility'] = visibility;
   if (isFree !== undefined) query['isFree'] = isFree;
-  if (organization) query['organization'] = organization;
-  if (createdBy)    query['createdBy']    = createdBy;
+  if (organization && mongoose.Types.ObjectId.isValid(organization)) {
+    query['organization'] = organization;
+  }
+  if (createdBy) {
+    if (mongoose.Types.ObjectId.isValid(createdBy)) {
+      query['createdBy'] = createdBy;
+    } else {
+      query['createdBy'] = new mongoose.Types.ObjectId();
+    }
+  }
+  if (userRolesFor) {
+    if (mongoose.Types.ObjectId.isValid(userRolesFor)) {
+      andClauses.push({
+        $or: [
+          { createdBy: userRolesFor },
+          { 'team.user': userRolesFor }
+        ]
+      });
+    } else {
+      andClauses.push({ createdBy: new mongoose.Types.ObjectId() });
+    }
+  }
   if (search) {
     const regex = new RegExp(search, 'i');
-    andClauses.push({
-      $or: [
-        { title: regex },
-        { shortDescription: regex },
-        { description: regex },
-        { organizerName: regex },
-        { eventType: regex },
-      ]
-    });
+
+    // Resolve tag IDs whose names match the search term
+    const matchedTags = await Tag.find({ name: regex }).select('_id').lean();
+    const tagIds = matchedTags.map(t => t._id);
+
+    // Map category keywords → event types (e.g. "tech" → conference, hackathon, webinar)
+    const categoryMatches: string[] = [];
+    for (const [catName, types] of Object.entries(CATEGORY_EVENT_TYPES)) {
+      if (regex.test(catName)) {
+        categoryMatches.push(...types);
+      }
+    }
+
+    const orClauses: any[] = [
+      { title: regex },
+      { shortDescription: regex },
+      { description: regex },
+      { organizerName: regex },
+      { eventType: regex },
+      { 'venue.city': regex },
+      { 'venue.country': regex },
+      { 'venue.name': regex },
+      { format: regex },
+      ...(tagIds.length > 0 ? [{ tags: { $in: tagIds } }] : []),
+      ...(categoryMatches.length > 0 ? [{ eventType: { $in: categoryMatches } }] : []),
+    ];
+
+    andClauses.push({ $or: orClauses });
   }
   if (format)       query['format']       = format;
   if (tag) {
@@ -380,6 +453,11 @@ export const listEvents = async (filters: {
 
   const [events, total] = await Promise.all([
     Event.find(query)
+      .select(
+        'title slug shortDescription coverImage startDate endDate format isFree currency status ' +
+        'visibility eventType organizerName analytics maxCapacity registrationCount ' +
+        'venue.city venue.name venue.onlineLink tags createdBy organization templateId requiresRegistration pricing ticketingTiers'
+      )
       .populate('tags',         'name slug')
       .populate('organization', 'name slug logo')
       .sort({ createdAt: -1 })
@@ -388,6 +466,7 @@ export const listEvents = async (filters: {
       .lean(),
     Event.countDocuments(query),
   ]);
+
 
   const updatedEvents = events.map(e => ({ ...e, status: calculateDynamicStatus(e) }));
 
@@ -591,4 +670,167 @@ export const deleteEvent = async (id: string) => {
 
 export const getChangelog = async (id: string) => {
   return Event.findById(id).select('changeLog title');
+};
+
+// ─── Approve / Reject ─────────────────────────────────────────────────────────
+
+export const approveEvent = async (id: string, changedBy: string) => {
+  return changeEventStatus(id, 'published', changedBy);
+};
+
+export const rejectEvent = async (id: string, changedBy: string, reason?: string) => {
+  const event = await Event.findById(id);
+  if (!event) return null;
+  return Event.findByIdAndUpdate(
+    id,
+    {
+      status: 'draft',
+      $push: {
+        changeLog: {
+          changedBy,
+          changedAt: new Date(),
+          field: 'status',
+          oldValue: event.status,
+          newValue: 'draft',
+          description: reason ? `Rejected: ${reason}` : 'Rejected by admin — returned to draft',
+        },
+      },
+    },
+    { new: true }
+  ).lean();
+};
+
+export const listPendingReview = async (reviewerId?: string) => {
+  const query: Record<string, unknown> = { status: 'review' };
+  if (reviewerId && mongoose.Types.ObjectId.isValid(reviewerId)) {
+    query['reviewer'] = reviewerId;
+  }
+  return Event.find(query)
+    .select('title slug status createdAt startDate endDate eventType format organizerName coverImage createdBy reviewer requiresReview team')
+    .populate('createdBy', 'name email username')
+    .populate('reviewer', 'name email username')
+    .sort({ createdAt: -1 })
+    .lean();
+};
+
+// ─── Recommendations ──────────────────────────────────────────────────────────
+
+export const getRecommendedEvents = async (userId?: string) => {
+  const now = new Date();
+  const baseQuery = {
+    status: 'published',
+    visibility: 'public',
+    startDate: { $gte: now },
+  };
+
+  // 1. Fetch upcoming events with popularity stats
+  const upcomingEvents = await Event.find(baseQuery)
+    .select('title slug shortDescription coverImage startDate endDate format isFree currency status visibility eventType organizerName analytics maxCapacity registrationCount venue.city venue.name venue.onlineLink tags createdBy organization templateId requiresRegistration pricing ticketingTiers')
+    .populate('tags', 'name slug')
+    .populate('organization', 'name slug logo')
+    .lean();
+
+  // Helper to calculate Global Popularity Score
+  const getPopularityScore = (event: any) => {
+    const a = event.analytics || { views: 0, likes: 0, bookmarks: 0, registrations: 0 };
+    return (a.views || 0) + ((a.likes || 0) * 3) + ((a.bookmarks || 0) * 4) + ((a.registrations || 0) * 10);
+  };
+
+  // 2. Score and limit Trending
+  const trending = [...upcomingEvents]
+    .sort((a, b) => getPopularityScore(b) - getPopularityScore(a))
+    .slice(0, 6);
+
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return { forYou: [], trending, viewedEventTypes: [] };
+  }
+
+  // 3. Build Affinity Profile for logged-in user
+  const user = await User.findById(userId).select('interests').lean();
+  const interests: string[] = (user?.interests ?? []) as string[];
+  
+  const interactions = await UserEventInteraction.find({ user: userId }).lean();
+  const registrations = await Registration.find({ userId }).select('eventId').lean();
+
+  const interactedEventIds = new Set([
+    ...interactions.map(i => i.event.toString()),
+    ...registrations.map(r => r.eventId.toString())
+  ]);
+
+  const interactedEvents = interactedEventIds.size > 0
+    ? await Event.find({ _id: { $in: Array.from(interactedEventIds) } }).select('tags eventType').populate('tags', 'slug').lean()
+    : [];
+
+  const eventMap = new Map(interactedEvents.map(e => [e._id.toString(), e]));
+
+  const affinityScore: Record<string, number> = {};
+
+  const addAffinity = (key: string, weight: number) => {
+    if (!key) return;
+    affinityScore[key] = (affinityScore[key] || 0) + weight;
+  };
+
+  // Explicit Interests (+5)
+  for (const slug of interests) {
+    addAffinity(`tag:${slug}`, 5);
+  }
+
+  // Interactions
+  for (const i of interactions) {
+    const e = eventMap.get(i.event.toString());
+    if (!e) continue;
+    
+    let weight = 0;
+    if (i.viewedAt) weight += 1;
+    if (i.liked) weight += 3;
+    if (i.bookmarked) weight += 5;
+    
+    if (weight > 0) {
+      addAffinity(`type:${e.eventType}`, weight);
+      for (const t of (e.tags as any) || []) addAffinity(`tag:${t.slug}`, weight);
+    }
+  }
+
+  // Registrations (+10)
+  for (const r of registrations) {
+    const e = eventMap.get(r.eventId.toString());
+    if (!e) continue;
+    addAffinity(`type:${e.eventType}`, 10);
+    for (const t of (e.tags as any) || []) addAffinity(`tag:${t.slug}`, 10);
+  }
+
+  // 4. Score 'For You' Candidates
+  // Exclude already interacted events
+  const candidates = upcomingEvents.filter(e => !interactedEventIds.has(e._id.toString()));
+
+  const scoredCandidates = candidates.map(e => {
+    let score = 0;
+    // Affinity matching
+    if (e.eventType) score += (affinityScore[`type:${e.eventType}`] || 0);
+    for (const t of (e.tags as any) || []) {
+      score += (affinityScore[`tag:${t.slug}`] || 0);
+    }
+    
+    // Add a scaled popularity boost to break ties and surface good events
+    score += getPopularityScore(e) * 0.1;
+    
+    return { event: e, score };
+  });
+
+  const forYou = scoredCandidates
+    .filter(c => c.score > 0) // Only return events that have SOME affinity or popularity
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+    .map(c => c.event);
+
+  // Exclude 'For You' from 'Trending' so we don't show duplicates
+  const forYouIds = new Set(forYou.map(e => e._id.toString()));
+  const filteredTrending = trending.filter(e => !forYouIds.has(e._id.toString())).slice(0, 6);
+
+  // Gather unique event types for the frontend chips fallback
+  const viewedEventTypes = Array.from(new Set(
+    interactedEvents.map(e => e.eventType).filter(Boolean)
+  ));
+
+  return { forYou, trending: filteredTrending, viewedEventTypes };
 };

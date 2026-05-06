@@ -8,8 +8,25 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onMenuClick, showMenuIcon }) => {
-  // Mock states for UI testing
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const uname = localStorage.getItem('username');
+    const uid = localStorage.getItem('userId');
+    // Force logout if state is corrupted (e.g. string "undefined")
+    if (loggedIn && (!uname || uname === 'undefined' || !uid || uid === 'undefined')) {
+      ['isLoggedIn', 'userId', 'username', 'userEmail', 'userName', 'userRole'].forEach(k => localStorage.removeItem(k));
+      return false;
+    }
+    return loggedIn;
+  });
+  const [username, setUsername] = useState(() => {
+    const uname = localStorage.getItem('username');
+    return (!uname || uname === 'undefined') ? '' : uname;
+  });
+  const [userEmail, setUserEmail] = useState(() => {
+    const email = localStorage.getItem('userEmail');
+    return (!email || email === 'undefined') ? '' : email;
+  });
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [searchValue, setSearchValue] = useState('');
   const navigate = useNavigate();
@@ -18,15 +35,35 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, showMenuIcon }) => 
   const isOrganizerMode = location.pathname.startsWith('/organizer') || location.pathname.startsWith('/templates') || location.pathname.startsWith('/create-event');
   const logoLink = (isLoggedIn && isOrganizerMode) ? '/organizer/events' : '/';
 
+  // Sync from localStorage on storage events (after login/logout from other components)
   useEffect(() => {
-    localStorage.setItem('isLoggedIn', String(isLoggedIn));
-  }, [isLoggedIn]);
-
-  useEffect(() => {
-    const handleStorage = () => setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
+    const handleStorage = () => {
+      const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+      const uname = localStorage.getItem('username');
+      const uid = localStorage.getItem('userId');
+      if (loggedIn && (!uname || uname === 'undefined' || !uid || uid === 'undefined')) {
+        ['isLoggedIn', 'userId', 'username', 'userEmail', 'userName', 'userRole'].forEach(k => localStorage.removeItem(k));
+        setIsLoggedIn(false);
+        setUsername('');
+        setUserEmail('');
+        return;
+      }
+      setIsLoggedIn(loggedIn);
+      setUsername(uname || '');
+      setUserEmail(localStorage.getItem('userEmail') || '');
+    };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  const handleLogout = () => {
+    ['isLoggedIn', 'userId', 'username', 'userEmail', 'userName', 'userRole'].forEach(k => localStorage.removeItem(k));
+    setIsLoggedIn(false);
+    setUsername('');
+    setUserEmail('');
+    window.dispatchEvent(new Event('storage'));
+    navigate('/');
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -150,12 +187,18 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, showMenuIcon }) => 
                 <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-surface"></span>
               </button>
               
-              <button className="flex items-center gap-2 hover:bg-background p-1 pr-3 rounded-full transition border border-transparent hover:border-border">
-                <img src="https://ui-avatars.com/api/?name=Sam+Student&background=2563EB&color=fff" alt="User" className="w-8 h-8 rounded-full shadow-sm" />
-                <span className="text-sm font-bold text-text-primary hidden lg:block">Sam</span>
+              <button className="flex items-center gap-2 hover:bg-background p-1 pr-3 rounded-full transition border border-transparent hover:border-border" title={userEmail}>
+                <img
+                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(username || 'U')}&background=6366F1&color=fff`}
+                  alt={username || 'User'}
+                  className="w-8 h-8 rounded-full shadow-sm"
+                />
+                <span className="text-sm font-bold text-text-primary hidden lg:block">
+                  {username || 'Account'}
+                </span>
               </button>
 
-              <button onClick={() => setIsLoggedIn(false)} className="text-xs text-text-secondary underline ml-2">Logout</button>
+              <button onClick={handleLogout} className="text-xs text-text-secondary underline ml-2">Logout</button>
             </>
           )}
         </div>
@@ -164,7 +207,12 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, showMenuIcon }) => 
       <LoginRequiredModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        onSuccess={() => setShowLoginModal(false)}
+        onSuccess={() => {
+          setShowLoginModal(false);
+          setIsLoggedIn(true);
+          setUsername(localStorage.getItem('username') || '');
+          setUserEmail(localStorage.getItem('userEmail') || '');
+        }}
         message="Please sign in or create an account."
       />
     </header>

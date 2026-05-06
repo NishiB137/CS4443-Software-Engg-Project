@@ -1,30 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 
-// All IANA timezones grouped by region
-const ALL_TIMEZONES: string[] = (() => {
-  try {
-    return (Intl as any).supportedValuesOf('timeZone') as string[];
-  } catch {
-    // Fallback list of common timezones
-    return [
-      'Africa/Abidjan','Africa/Accra','Africa/Cairo','Africa/Johannesburg','Africa/Lagos','Africa/Nairobi',
-      'America/Anchorage','America/Bogota','America/Chicago','America/Denver','America/Edmonton','America/Halifax',
-      'America/Los_Angeles','America/Mexico_City','America/New_York','America/Phoenix','America/Santiago',
-      'America/Sao_Paulo','America/St_Johns','America/Toronto','America/Vancouver','America/Winnipeg',
-      'Asia/Bangkok','Asia/Calcutta','Asia/Colombo','Asia/Dubai','Asia/Hong_Kong','Asia/Jakarta',
-      'Asia/Jerusalem','Asia/Kabul','Asia/Karachi','Asia/Kathmandu','Asia/Kolkata','Asia/Kuala_Lumpur',
-      'Asia/Manila','Asia/Qatar','Asia/Seoul','Asia/Shanghai','Asia/Singapore','Asia/Taipei','Asia/Tehran',
-      'Asia/Tokyo','Asia/Yangon','Atlantic/Azores','Atlantic/Cape_Verde','Australia/Adelaide',
-      'Australia/Brisbane','Australia/Darwin','Australia/Melbourne','Australia/Perth','Australia/Sydney',
-      'Europe/Amsterdam','Europe/Athens','Europe/Berlin','Europe/Brussels','Europe/Bucharest','Europe/Budapest',
-      'Europe/Copenhagen','Europe/Dublin','Europe/Helsinki','Europe/Istanbul','Europe/Kiev','Europe/Lisbon',
-      'Europe/London','Europe/Madrid','Europe/Moscow','Europe/Oslo','Europe/Paris','Europe/Prague',
-      'Europe/Rome','Europe/Sofia','Europe/Stockholm','Europe/Vienna','Europe/Warsaw','Europe/Zurich',
-      'Pacific/Auckland','Pacific/Fiji','Pacific/Guam','Pacific/Honolulu','Pacific/Midway','Pacific/Pago_Pago',
-      'UTC',
-    ];
-  }
-})();
+import { eventApi } from '@/services/api';
+
+let cachedTimezones: string[] = [];
 
 const getUserTimezone = (): string => {
   try {
@@ -68,11 +46,21 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const userTz = useMemo(() => getUserTimezone(), []);
 
+  const [allTimezones, setAllTimezones] = useState<string[]>(cachedTimezones);
+  useEffect(() => {
+    if (cachedTimezones.length === 0) {
+      eventApi.getTimezones().then(res => {
+        cachedTimezones = res.data;
+        setAllTimezones(res.data);
+      }).catch(err => console.error(err));
+    }
+  }, []);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return ALL_TIMEZONES;
-    return ALL_TIMEZONES.filter(tz => tz.toLowerCase().includes(q));
-  }, [search]);
+    if (!q) return allTimezones;
+    return allTimezones.filter(tz => tz.toLowerCase().includes(q));
+  }, [search, allTimezones]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -152,9 +140,8 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
                 <button
                   type="button"
                   onClick={() => { onChange(tz); setOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 transition flex items-center justify-between gap-2 ${
-                    value === tz ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-800'
-                  }`}
+                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 transition flex items-center justify-between gap-2 ${value === tz ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-800'
+                    }`}
                 >
                   <span className="truncate">{tz}</span>
                   <span className="text-xs text-gray-400 flex-shrink-0">{getOffset(tz)}</span>

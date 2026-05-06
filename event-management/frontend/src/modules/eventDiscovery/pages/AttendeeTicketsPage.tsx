@@ -13,7 +13,7 @@ export const AttendeeTicketsPage: React.FC = () => {
 
   useEffect(() => {
     const handleStorage = () => {
-      const saved = localStorage.getItem('user_email');
+      const saved = localStorage.getItem('userEmail');
       if (saved) {
         setEmail(saved);
         setPendingLogin(false);

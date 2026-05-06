@@ -38,6 +38,7 @@ export const AttendeeBookmarksPage: React.FC = () => {
                 date={new Date(event.startDate).toLocaleDateString()}
                 location={event.format === 'physical' ? (event.venue?.city || 'TBA') : 'Online'}
                 price={event.isFree ? 'Free' : (event as any).pricing?.basePrice || 0}
+                currency={event.currency}
                 images={event.coverImage ? [event.coverImage, ...(event.secondaryImages || [])] : []}
                 category={event.eventType}
                 organization={typeof event.organization === 'object' ? (event.organization as any).name : 'Event Organizer'}

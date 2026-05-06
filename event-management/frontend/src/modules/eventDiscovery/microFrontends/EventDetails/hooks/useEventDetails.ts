@@ -1,36 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { eventApi, bookmarkApi, API_BASE_URL, type ApiEvent } from '@/services/api';
+import { eventApi, bookmarkApi, registrationApi, API_BASE_URL, type ApiEvent } from '@/services/api';
 import { formatEventDate, getVenueDisplay, getOrganizerName } from '../../EventCatalog/hooks/UseEvents';
-
-// ─── Timezone-aware date formatting ──────────────────────────────────────────
-const getUserTimezone = (): string => {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
-};
-
-const formatDateInTimezone = (isoDate: string, tz: string): string => {
-  if (!isoDate) return '';
-  try {
-    const date = new Date(isoDate);
-    const formatted = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-      timeZoneName: 'short',
-    }).format(date);
-    
-    // Replace raw offsets with abbreviations for common regions like India
-    return formatted.replace(/GMT\+5:30/g, 'IST').replace(/GMT\+05:30/g, 'IST');
-  } catch {
-    return formatEventDate(isoDate);
-  }
-};
-
-
 
 type TicketingTier = {
   name: string;
@@ -72,10 +43,8 @@ export interface EventDetail {
   title: string;
   shortDescription: string;
   description: string;
-  dateInfo: string;         // formatted in event timezone
-  endDateInfo: string;      // formatted in event timezone
-  dateInfoLocal?: string;   // formatted in viewer's local timezone (if different)
-  endDateInfoLocal?: string;
+  dateInfo: string;
+  endDateInfo: string;
   locationInfo: string;
   onlineLink: string;
   format: string;
@@ -86,6 +55,7 @@ export interface EventDetail {
   images: string[];
   tags: string[];
   isFree: boolean;
+  currency: string;
   tickets: Array<{
     id: string;
     type: string;
@@ -189,18 +159,14 @@ const mapApiEventToDetail = (e: ApiEvent): Omit<EventDetail, 'sessions'> => {
   const analytics        = (e as unknown as { analytics?: Analytics }).analytics;
   const registrationCount = (e as unknown as { registrationCount?: number }).registrationCount;
   const eventTz = e.timezone || 'UTC';
-  const userTz  = getUserTimezone();
-  const showLocalTime = eventTz !== userTz;
 
   return {
     id:               e._id,
     title:            e.title ?? 'Untitled Event',
     shortDescription: e.shortDescription ?? '',
     description:      e.description ?? 'No description provided.',
-    dateInfo:     formatDateInTimezone(e.startDate, eventTz),
-    endDateInfo:  formatDateInTimezone(e.endDate,   eventTz),
-    dateInfoLocal:    showLocalTime ? formatDateInTimezone(e.startDate, userTz) : undefined,
-    endDateInfoLocal: showLocalTime ? formatDateInTimezone(e.endDate,   userTz) : undefined,
+    dateInfo:     formatEventDate(e.startDate, eventTz),
+    endDateInfo:  formatEventDate(e.endDate,   eventTz),
     locationInfo,
     onlineLink:       (() => {
       const raw = v?.onlineLink ?? '';
@@ -215,6 +181,7 @@ const mapApiEventToDetail = (e: ApiEvent): Omit<EventDetail, 'sessions'> => {
     images,
     tags,
     isFree:           e.isFree,
+    currency:         (e as unknown as { currency?: string }).currency || 'USD',
     tickets,
     organizer: {
       name:      orgName,
@@ -339,11 +306,35 @@ export const useEventDetails = () => {
           })
           .catch(() => {});
 
-        // Check registration status from localStorage (quick, avoids server round-trip)
-        const storedEmail = localStorage.getItem(`reg_email_${detail.id}`);
-        if (storedEmail) {
-          setIsRegistered(true);
-          setRegisteredEmail(storedEmail);
+        // Check registration status
+        const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+        const currentUserEmail = localStorage.getItem('userEmail');
+        
+        if (isLoggedIn && currentUserEmail) {
+          // Fast path with localStorage fallback
+          const storedEmail = localStorage.getItem(`reg_email_${detail.id}`);
+          if (storedEmail === currentUserEmail) {
+            setIsRegistered(true);
+            setRegisteredEmail(currentUserEmail);
+          }
+          
+          // Background verification
+          registrationApi.check(detail.id, currentUserEmail)
+            .then(res => {
+              if (res.success && res.registered) {
+                setIsRegistered(true);
+                setRegisteredEmail(currentUserEmail);
+                localStorage.setItem(`reg_email_${detail.id}`, currentUserEmail);
+              } else {
+                setIsRegistered(false);
+                setRegisteredEmail(null);
+                localStorage.removeItem(`reg_email_${detail.id}`);
+              }
+            })
+            .catch(() => {});
+        } else {
+          setIsRegistered(false);
+          setRegisteredEmail(null);
         }
 
         // View count increment

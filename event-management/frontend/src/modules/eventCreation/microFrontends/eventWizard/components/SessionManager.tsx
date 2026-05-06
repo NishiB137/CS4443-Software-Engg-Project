@@ -4,23 +4,23 @@ import { EMPTY_SESSION, LIMITS } from '@/modules/eventCreation/microFrontends/ev
 import type { SessionTemplate, FieldSpec } from '@/services/api';
 import { SESSION_SYSTEM_FIELDS, SESSION_SYSTEM_FIELD_KEYS } from '@/shared/template/sessionSystemFields';
 import { DateTimePicker } from '@/modules/eventCreation/microFrontends/eventWizard/components/DateTimePicker';
+import { TimezoneSelector } from '@/modules/eventCreation/microFrontends/eventWizard/components/TimezoneSelector';
 
 const SESSION_TYPES = [
-  { value: 'keynote',           label: 'Keynote' },
-  { value: 'panel',             label: 'Panel Discussion' },
-  { value: 'workshop',          label: 'Workshop' },
-  { value: 'networking',        label: 'Networking' },
-  { value: 'performance',       label: 'Performance' },
+  { value: 'keynote', label: 'Keynote' },
+  { value: 'panel', label: 'Panel Discussion' },
+  { value: 'workshop', label: 'Workshop' },
+  { value: 'networking', label: 'Networking' },
+  { value: 'performance', label: 'Performance' },
   { value: 'competition_round', label: 'Competition Round' },
-  { value: 'break',             label: 'Break' },
-  { value: 'other',             label: 'Other' },
+  { value: 'break', label: 'Break' },
+  { value: 'other', label: 'Other' },
 ];
 
 const inputCls = (hasError?: boolean) =>
-  `w-full border rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:outline-none transition ${
-    hasError
-      ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50'
-      : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
+  `w-full border rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:outline-none transition ${hasError
+    ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50'
+    : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
   }`;
 
 const labelCls = 'block text-xs font-medium text-gray-700 mb-1';
@@ -64,7 +64,7 @@ const validateSession = (s: SessionFormData, fields: FieldSpec[]): SessionErrors
 
   if (s.startDate && s.startTime && s.endDate && s.endTime) {
     const start = new Date(`${s.startDate}T${s.startTime}`);
-    const end   = new Date(`${s.endDate}T${s.endTime}`);
+    const end = new Date(`${s.endDate}T${s.endTime}`);
     if (end <= start) errors.endDate = 'End must be after start.';
   }
 
@@ -143,12 +143,12 @@ interface SessionFormProps {
 }
 
 const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, onRemove }) => {
-  const [expanded, setExpanded]         = useState(true);
+  const [expanded, setExpanded] = useState(true);
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
-  const [errors, setErrors]             = useState<SessionErrors>({});
+  const [errors, setErrors] = useState<SessionErrors>({});
 
   const forms = session.templateLayout?.forms?.length ? session.templateLayout.forms : [{ name: 'Session Details', order: 0, categories: [] }];
-  const [activeTab, setActiveTab]       = useState(forms[0].name);
+  const [activeTab, setActiveTab] = useState(forms[0].name);
 
   const fields = (session.templateFields && session.templateFields.length > 0) ? session.templateFields : SESSION_SYSTEM_FIELDS;
 
@@ -210,9 +210,8 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
                   key={form.name}
                   type="button"
                   onClick={() => setActiveTab(form.name)}
-                  className={`py-2 text-sm font-medium transition-colors border-b-2 -mb-[1px] ${
-                    activeTab === form.name ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'
-                  }`}
+                  className={`py-2 text-sm font-medium transition-colors border-b-2 -mb-[1px] ${activeTab === form.name ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'
+                    }`}
                 >
                   {form.name}
                 </button>
@@ -224,132 +223,142 @@ const SessionFormRow: React.FC<SessionFormProps> = ({ session, index, onUpdate, 
             const fds = categories[catName];
             const isCatExpanded = expandedCats[catName] !== false;
             return (
-            <div key={catName} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-              <div 
-                className="flex items-center justify-between cursor-pointer mb-4 select-none"
-                onClick={() => setExpandedCats(prev => ({ ...prev, [catName]: prev[catName] === false ? true : false }))}
-              >
-                <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{catName}</h4>
-                <svg className={`w-4 h-4 text-gray-400 transition-transform ${isCatExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                </svg>
-              </div>
-              {isCatExpanded && (
-                <div className="space-y-4">
-                  {fds.map((f) => {
-                    const isSys = SESSION_SYSTEM_FIELD_KEYS.includes(f.key);
-                    const val = String((isSys ? (session as unknown as Record<string, unknown>)[f.key] : session.customFieldValues[f.key]) ?? '');
-                    const err = !!errors[f.key];
-
-                    const setVal = (v: string) => {
-                      if (isSys) {
-                        update({ [f.key]: v });
-                      } else {
-                        update({ customFieldValues: { ...session.customFieldValues, [f.key]: v } });
-                      }
-                    };
-
-                    const common = {
-                      className: inputCls(err),
-                      value: val,
-                      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setVal(e.target.value),
-                    };
-
-                    return (
-                      <div key={f.key}>
-                        <label className={labelCls}>
-                          {f.label}
-                          {f.required && <span className="text-red-500 text-lg leading-3 ml-0.5">*</span>}
-                        </label>
-                        {f.helpText && <p className="text-[11px] text-gray-400 mb-1.5">{f.helpText}</p>}
-                        {(f.fieldType === 'text' || f.fieldType === 'textarea') && f.maxLength && (
-                          <p className="text-[11px] text-gray-400 mb-2 italic">
-                            {f.min ? `Min: ${f.min} chars, ` : ''}Max: {f.maxLength} chars
-                          </p>
-                        )}
-
-                      {f.fieldType === 'speakers' ? (
-                        <div className="mt-2">
-                          <SpeakerForm speakers={session.speakers || []} onChange={(speakers) => update({ speakers })} />
-                        </div>
-                      ) : f.fieldType === 'textarea' ? (
-                        <div>
-                          <textarea rows={3} placeholder={f.placeholder} maxLength={f.maxLength} {...common} />
-                          <div className="flex justify-between">
-                            <FieldError msg={errors[f.key]} />
-                            {f.maxLength && <CharCount current={val.length} max={f.maxLength} />}
-                          </div>
-                        </div>
-                      ) : f.fieldType === 'select' ? (
-                        <div>
-                          <select {...common}>
-                            <option value="">Select...</option>
-                            {f.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                          </select>
-                          <FieldError msg={errors[f.key]} />
-                        </div>
-                      ) : f.fieldType === 'toggle' ? (
-                        <div>
-                          <div className="flex items-center mt-1">
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={val === 'true'}
-                              onClick={() => setVal(val === 'true' ? 'false' : 'true')}
-                              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${val === 'true' ? 'bg-blue-600' : 'bg-gray-200'}`}
-                            >
-                              <span className="sr-only">Toggle {f.label}</span>
-                              <span
-                                aria-hidden="true"
-                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${val === 'true' ? 'translate-x-5' : 'translate-x-0'}`}
-                              />
-                            </button>
-                            <span className="ml-3 text-sm font-medium text-gray-900">{val === 'true' ? 'Yes' : 'No'}</span>
-                          </div>
-                          <FieldError msg={errors[f.key]} />
-                        </div>
-                      ) : (f.key === 'startDate' || f.key === 'endDate') ? (
-                        <div>
-                          <DateTimePicker
-                            id={f.key}
-                            dateValue={String((session as unknown as Record<string, unknown>)[f.key] ?? '')}
-                            timeValue={String((session as unknown as Record<string, unknown>)[f.key === 'startDate' ? 'startTime' : 'endTime'] ?? '')}
-                            onChange={(d, t) => {
-                              update({ [f.key]: d, [f.key === 'startDate' ? 'startTime' : 'endTime']: t });
-                            }}
-                            className={err ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50' : ''}
-                          />
-                          <FieldError msg={errors[f.key] || errors[f.key === 'startDate' ? 'startTime' : 'endTime']} />
-                        </div>
-                      ) : (f.key === 'startTime' || f.key === 'endTime') ? null : (
-                        <div>
-                          <input
-                            type={
-                              f.fieldType === 'number' ? 'number'
-                                : f.fieldType === 'url' ? 'url'
-                                : f.fieldType === 'email' ? 'email'
-                                : f.fieldType === 'date' ? 'date'
-                                : f.fieldType === 'time' ? 'time' : 'text'
-                            }
-                            placeholder={f.placeholder}
-                            maxLength={f.maxLength}
-                            min={f.min}
-                            max={f.max}
-                            {...common}
-                          />
-                          <div className="flex justify-between">
-                            <FieldError msg={errors[f.key]} />
-                            {f.maxLength && <CharCount current={val.length} max={f.maxLength} />}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div key={catName} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div
+                  className="flex items-center justify-between cursor-pointer mb-4 select-none"
+                  onClick={() => setExpandedCats(prev => ({ ...prev, [catName]: prev[catName] === false ? true : false }))}
+                >
+                  <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{catName}</h4>
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${isCatExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                  </svg>
                 </div>
-              )}
-            </div>
-          )})}
+                {isCatExpanded && (
+                  <div className="space-y-4">
+                    {fds.map((f) => {
+                      const isSys = SESSION_SYSTEM_FIELD_KEYS.includes(f.key);
+                      const val = String((isSys ? (session as unknown as Record<string, unknown>)[f.key] : session.customFieldValues[f.key]) ?? '');
+                      const err = !!errors[f.key];
+
+                      const setVal = (v: string) => {
+                        if (isSys) {
+                          update({ [f.key]: v });
+                        } else {
+                          update({ customFieldValues: { ...session.customFieldValues, [f.key]: v } });
+                        }
+                      };
+
+                      const common = {
+                        className: inputCls(err),
+                        value: val,
+                        onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setVal(e.target.value),
+                      };
+
+                      return (
+                        <div key={f.key}>
+                          <label className={labelCls}>
+                            {f.label}
+                            {f.required && <span className="text-red-500 text-lg leading-3 ml-0.5">*</span>}
+                          </label>
+                          {f.helpText && <p className="text-[11px] text-gray-400 mb-1.5">{f.helpText}</p>}
+                          {(f.fieldType === 'text' || f.fieldType === 'textarea') && f.maxLength && (
+                            <p className="text-[11px] text-gray-400 mb-2 italic">
+                              {f.min ? `Min: ${f.min} chars, ` : ''}Max: {f.maxLength} chars
+                            </p>
+                          )}
+
+                          {f.fieldType === 'speakers' ? (
+                            <div className="mt-2">
+                              <SpeakerForm speakers={session.speakers || []} onChange={(speakers) => update({ speakers })} />
+                            </div>
+                          ) : f.fieldType === 'textarea' ? (
+                            <div>
+                              <textarea rows={3} placeholder={f.placeholder} maxLength={f.maxLength} {...common} />
+                              <div className="flex justify-between">
+                                <FieldError msg={errors[f.key]} />
+                                {f.maxLength && <CharCount current={val.length} max={f.maxLength} />}
+                              </div>
+                            </div>
+                          ) : f.key === 'timezone' ? (
+                            <div>
+                              <TimezoneSelector
+                                id={f.key}
+                                value={val as string}
+                                onChange={(tz) => setVal(tz)}
+                              />
+                              <FieldError msg={errors[f.key]} />
+                            </div>
+                          ) : f.fieldType === 'select' ? (
+                            <div>
+                              <select {...common}>
+                                <option value="">Select...</option>
+                                {f.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                              </select>
+                              <FieldError msg={errors[f.key]} />
+                            </div>
+                          ) : f.fieldType === 'toggle' ? (
+                            <div>
+                              <div className="flex items-center mt-1">
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={val === 'true'}
+                                  onClick={() => setVal(val === 'true' ? 'false' : 'true')}
+                                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${val === 'true' ? 'bg-blue-600' : 'bg-gray-200'}`}
+                                >
+                                  <span className="sr-only">Toggle {f.label}</span>
+                                  <span
+                                    aria-hidden="true"
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${val === 'true' ? 'translate-x-5' : 'translate-x-0'}`}
+                                  />
+                                </button>
+                                <span className="ml-3 text-sm font-medium text-gray-900">{val === 'true' ? 'Yes' : 'No'}</span>
+                              </div>
+                              <FieldError msg={errors[f.key]} />
+                            </div>
+                          ) : (f.key === 'startDate' || f.key === 'endDate') ? (
+                            <div>
+                              <DateTimePicker
+                                id={f.key}
+                                dateValue={String((session as unknown as Record<string, unknown>)[f.key] ?? '')}
+                                timeValue={String((session as unknown as Record<string, unknown>)[f.key === 'startDate' ? 'startTime' : 'endTime'] ?? '')}
+                                onChange={(d, t) => {
+                                  update({ [f.key]: d, [f.key === 'startDate' ? 'startTime' : 'endTime']: t });
+                                }}
+                                className={err ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50' : ''}
+                              />
+                              <FieldError msg={errors[f.key] || errors[f.key === 'startDate' ? 'startTime' : 'endTime']} />
+                            </div>
+                          ) : (f.key === 'startTime' || f.key === 'endTime') ? null : (
+                            <div>
+                              <input
+                                type={
+                                  f.fieldType === 'number' ? 'number'
+                                    : f.fieldType === 'url' ? 'url'
+                                      : f.fieldType === 'email' ? 'email'
+                                        : f.fieldType === 'date' ? 'date'
+                                          : f.fieldType === 'time' ? 'time' : 'text'
+                                }
+                                placeholder={f.placeholder}
+                                maxLength={f.maxLength}
+                                min={f.min}
+                                max={f.max}
+                                {...common}
+                              />
+                              <div className="flex justify-between">
+                                <FieldError msg={errors[f.key]} />
+                                {f.maxLength && <CharCount current={val.length} max={f.maxLength} />}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -406,15 +415,15 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ sessions, sessio
             </svg>
           </div>
           <p className="text-sm font-medium text-gray-700 mb-4">No sessions added yet</p>
-            <div className="flex gap-2 items-center justify-center mt-6">
-              <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[200px]" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
-                <option value="Blank Session">Blank Session</option>
-                {sessionTemplates.length > 0 && <optgroup label="Templates">
-                  {sessionTemplates.map((tpl, idx) => <option key={`${tpl.title}-${idx}`} value={tpl.title}>{tpl.title}</option>)}
-                </optgroup>}
-              </select>
-              <button type="button" onClick={addSession} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm">+ Add</button>
-            </div>
+          <div className="flex gap-2 items-center justify-center mt-6">
+            <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[200px]" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
+              <option value="Blank Session">Blank Session</option>
+              {sessionTemplates.length > 0 && <optgroup label="Templates">
+                {sessionTemplates.map((tpl, idx) => <option key={`${tpl.title}-${idx}`} value={tpl.title}>{tpl.title}</option>)}
+              </optgroup>}
+            </select>
+            <button type="button" onClick={addSession} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm">+ Add</button>
+          </div>
         </div>
       ) : (
         <div className="space-y-6">

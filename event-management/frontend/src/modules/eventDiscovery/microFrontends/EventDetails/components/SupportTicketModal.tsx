@@ -10,7 +10,7 @@ interface SupportTicketModalProps {
 }
 
 export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, onClose, organizerName, eventId }) => {
-  const [email, setEmail] = useState(() => localStorage.getItem('user_email') || localStorage.getItem('last_support_email') || '');
+  const [email, setEmail] = useState(() => localStorage.getItem('userEmail') || localStorage.getItem('last_support_email') || '');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);

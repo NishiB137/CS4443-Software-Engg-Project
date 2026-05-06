@@ -61,6 +61,7 @@ export interface IEvent extends Document {
   
   maxCapacity?: number;
   registrationCount: number;
+  currency: string;
   pricing: { basePrice: number; discountPercentage: number };
   ticketingTiers: Array<{ name: string; price: number; capacity: number; duration?: string; description?: string }>;
   
@@ -95,6 +96,19 @@ export interface IEvent extends Document {
   metaTitle?: string;
   metaDescription?: string;
   customUrl?: string;
+
+  entrySettings?: {
+    enableAttendanceManagement: boolean;
+    scannerType: 'qr' | 'none';
+    requireSpecificTime: boolean;
+    entryStartTime?: Date;
+    entryEndTime?: Date;
+  };
+
+  /** Whether this event must be reviewed before going live */
+  requiresReview: boolean;
+  /** The team member designated as reviewer (ref User) */
+  reviewer?: mongoose.Types.ObjectId;
 }
 
 const EventSchema = new Schema<IEvent>({
@@ -129,6 +143,7 @@ const EventSchema = new Schema<IEvent>({
   policies: { type: EventPolicySchema, default: () => ({}) },
   maxCapacity:       { type: Number },
   registrationCount: { type: Number, default: 0 },
+  currency:          { type: String, default: 'INR', enum: ['USD', 'INR', 'EUR', 'GBP'] },
   pricing: { basePrice: { type: Number, default: 0 }, discountPercentage: { type: Number, default: 0 } },
   ticketingTiers: [{ name: { type: String, required: true }, price: { type: Number, required: true }, capacity: { type: Number, required: true }, duration: { type: String }, description: { type: String } }],
   organizerName: { type: String },
@@ -162,6 +177,16 @@ const EventSchema = new Schema<IEvent>({
     categoryOrder: { type: Number, default: 0 },
     order:         { type: Number, default: 0 },
   }],
+  
+  entrySettings: {
+    enableAttendanceManagement: { type: Boolean, default: true },
+    scannerType: { type: String, enum: ['qr', 'none'], default: 'qr' },
+    requireSpecificTime: { type: Boolean, default: false },
+    entryStartTime: { type: Date },
+    entryEndTime: { type: Date }
+  },
+  requiresReview: { type: Boolean, default: false },
+  reviewer: { type: Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────────

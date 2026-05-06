@@ -45,6 +45,10 @@ const EventCard: React.FC<{
   const [menuOpen, setMenuOpen] = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
+  
+  const currentUserId = localStorage.getItem('userId');
+  const isReviewer = event.reviewer === currentUserId || (typeof event.reviewer === 'object' && event.reviewer?._id === currentUserId);
+
 
   const handleStatusChange = async (s: string) => {
     setStatusLoading(true);
@@ -95,7 +99,7 @@ const EventCard: React.FC<{
                   Save as Template
                 </button>
                 <div className="h-px bg-gray-100 my-1" />
-                {event.status === 'draft' && (
+                {(event.status === 'draft' || event.status === 'approved') && (
                   <button
                     onClick={() => handleStatusChange('published')}
                     className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-green-50 text-green-700 font-medium"
@@ -130,9 +134,47 @@ const EventCard: React.FC<{
           )}
         </div>
 
-        <div className="flex gap-2 mt-auto">
-          <button onClick={() => navigate(`/create-event?id=${event._id}`)} className="flex-1 py-1.5 text-center text-sm font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition">Edit</button>
-          <button onClick={() => navigate(`/organizer/events/${event._id}/details`, { state: { eventTitle: event.title } })} className="flex-1 py-1.5 text-center text-sm font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm">View Details</button>
+        <div className="flex flex-col gap-2 mt-auto">
+          {event.status === 'review' && isReviewer ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setStatusLoading(true); onStatusChange(event._id, 'approved').finally(() => setStatusLoading(false)); }}
+                disabled={statusLoading}
+                className="flex-1 py-1.5 text-center text-xs font-bold rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition shadow-sm disabled:opacity-50"
+              >
+                Approve Only
+              </button>
+              <button
+                onClick={() => { setStatusLoading(true); onStatusChange(event._id, 'published').finally(() => setStatusLoading(false)); }}
+                disabled={statusLoading}
+                className="flex-1 py-1.5 text-center text-xs font-bold rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition shadow-sm disabled:opacity-50"
+              >
+                Approve & Publish
+              </button>
+            </div>
+          ) : null}
+          {event.status === 'approved' ? (
+            <button
+              onClick={() => { setStatusLoading(true); onStatusChange(event._id, 'published').finally(() => setStatusLoading(false)); }}
+              disabled={statusLoading}
+              className="w-full py-2 text-center text-sm font-bold rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 transition shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {statusLoading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M7.5 12l4.5-4.5m0 0l4.5 4.5M12 7.5v13.5" />
+                  </svg>
+                  Publish Event
+                </>
+              )}
+            </button>
+          ) : null}
+          <div className="flex gap-2">
+            {!event.team?.some(m => (typeof m.user === 'object' ? m.user._id : m.user) === localStorage.getItem('userId') && m.role === 'viewer') && (
+              <button onClick={() => navigate(`/create-event?id=${event._id}`)} className="flex-1 py-1.5 text-center text-sm font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition">Edit</button>
+            )}
+            <button onClick={() => navigate(`/organizer/events/${event._id}/details`, { state: { eventTitle: event.title } })} className="flex-1 py-1.5 text-center text-sm font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm">View Details</button>
+          </div>
         </div>
       </div>
 
@@ -176,7 +218,13 @@ export const OrganizerEventsPage: React.FC = () => {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const res = await eventApi.list({ visibility: 'all' });
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setEvents([]);
+        setLoading(false);
+        return;
+      }
+      const res = await eventApi.list({ visibility: 'all', userRolesFor: userId } as any);
       setEvents(res.events);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error loading events');

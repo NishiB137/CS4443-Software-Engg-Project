@@ -40,9 +40,17 @@ export const toggleBookmark = async (req: Request, res: Response) => {
 export const listBookmarks = async (req: Request, res: Response) => {
   try {
     const userId = (req.query['userId'] as string | undefined) || DEV_USER_ID;
+    const query: Record<string, unknown> = { bookmarked: true };
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      query['user'] = userId;
+    } else {
+      // If invalid ID passed, return empty list
+      res.json({ success: true, data: [], count: 0 });
+      return;
+    }
 
     const interactions = await UserEventInteraction
-      .find({ user: userId, bookmarked: true })
+      .find(query)
       .populate({ path: 'event', model: 'Event' })
       .lean();
 
@@ -61,7 +69,7 @@ export const checkBookmark = async (req: Request, res: Response) => {
     const eventId = Array.isArray(rawId) ? rawId[0] : rawId;
     const userId  = (req.query['userId'] as string | undefined) || DEV_USER_ID;
 
-    if (!eventId || !mongoose.Types.ObjectId.isValid(eventId)) {
+    if (!eventId || !mongoose.Types.ObjectId.isValid(eventId) || !mongoose.Types.ObjectId.isValid(userId)) {
       res.json({ success: true, bookmarked: false }); return;
     }
 

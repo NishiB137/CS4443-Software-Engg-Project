@@ -165,7 +165,7 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
       ...otherSysDefaults,
       eventType:  otherSysDefaults.eventType || tpl.eventType,
       format:     (otherSysDefaults.format || tpl.format) as typeof data.format,
-      isFree:     otherSysDefaults.isFree !== undefined ? otherSysDefaults.isFree === 'true' : tpl.isFree,
+      isPaid:     otherSysDefaults.isPaid !== undefined ? otherSysDefaults.isPaid === 'true' : tpl.isFree === false,
       visibility: (tpl.defaultVisibility as typeof data.visibility) || 'public',
       venue: { ...data.venue, onlineLink: onlineLinkDefault, ...venueSysFields },
       // Pre-fill policies from template defaults
@@ -174,6 +174,17 @@ export const Step1Template: React.FC<WizardStepProps> = ({ data, updateData, err
         cancellationPolicy: tpl.defaultPolicies?.cancellationPolicy || '',
         attendeeMinAge:     String(tpl.defaultPolicies?.attendeeMinAge ?? 0),
       },
+      // Pre-fill entry settings from template defaults
+      ...(tpl.defaultEntrySettings ? {
+        entrySettings: {
+          enableAttendanceManagement: tpl.defaultEntrySettings.enableAttendanceManagement ?? false,
+          scannerType: tpl.defaultEntrySettings.scannerType ?? 'none',
+          allowMultipleScans: tpl.defaultEntrySettings.allowMultipleScans ?? false,
+          requireSpecificTime: tpl.defaultEntrySettings.requireSpecificTime ?? false,
+          entryStartTime: '',
+          entryEndTime: '',
+        },
+      } : {}),
     });
     // Track usage
     templateApi.use(tpl._id).catch(() => {});

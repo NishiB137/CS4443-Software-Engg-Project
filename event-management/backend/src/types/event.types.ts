@@ -68,6 +68,32 @@ export interface CreateEventBody {
     order?: number;
   }>;
 
+  // Registration control
+  requiresRegistration?: boolean;
+  registrationFields?: Array<{
+    key: string;
+    label: string;
+    fieldType: string;
+    required: boolean;
+    options?: string[];
+    category?: string;
+    categoryOrder?: number;
+    order?: number;
+  }>;
+
+  // Ticketing
+  currency?: string;
+  ticketingTiers?: Array<{ name: string; price: number; capacity: number; description?: string }>;
+
+  // Entry / attendance settings
+  entrySettings?: {
+    enableAttendanceManagement?: boolean;
+    scannerType?: 'qr' | 'none';
+    requireSpecificTime?: boolean;
+    entryStartTime?: string;
+    entryEndTime?: string;
+  };
+
   // For dev/sprint-2: org and user are passed directly (no auth yet)
   organization: string;
   createdBy: string;

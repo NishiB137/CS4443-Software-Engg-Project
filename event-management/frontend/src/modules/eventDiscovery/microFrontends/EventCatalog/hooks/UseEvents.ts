@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { eventApi, type ApiEvent } from '@/services/api';
-import { format } from 'date-fns';
 
 export const getVenueDisplay = (event: ApiEvent): string => {
   const v = event.venue;
@@ -11,16 +10,81 @@ export const getVenueDisplay = (event: ApiEvent): string => {
   return parts.join(', ') || 'TBD';
 };
 
-export const getPriceDisplay = (event: ApiEvent): number | 'Free' => {
+export const getPriceDisplay = (event: ApiEvent): number | string | 'Free' => {
   if (event.isFree) return 'Free';
-  return 0;
+  if (event.ticketingTiers && event.ticketingTiers.length > 0) {
+    const prices = event.ticketingTiers.map(t => t.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    if (minPrice !== maxPrice) {
+      return `${minPrice} - ${maxPrice}`;
+    }
+    return minPrice;
+  }
+  return event.pricing?.basePrice ?? 0;
 };
 
-export const formatEventDate = (isoDate: string): string => {
+export const getUserTimezone = (): string => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+};
+
+export const getDynamicTimezoneAbbreviation = (date: Date, tz: string): string => {
   try {
-    return format(new Date(isoDate), "MMMM d, yyyy '•' h:mm a");
+    const shortFallback = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+      .formatToParts(date)
+      .find(p => p.type === 'timeZoneName')?.value || '';
+
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'long',
+    }).formatToParts(date);
+    
+    const tzPart = parts.find(p => p.type === 'timeZoneName')?.value;
+    if (tzPart) {
+      if (tzPart.includes('GMT') || tzPart.includes('UTC')) return shortFallback;
+      const abbr = tzPart.split(/[- ]/).map(w => w[0]).join('').toUpperCase();
+      if (!shortFallback.includes('GMT') && /^[A-Z]{3,4}$/.test(shortFallback)) {
+          return shortFallback;
+      }
+      return abbr;
+    }
+    return shortFallback;
   } catch {
-    return isoDate;
+    return '';
+  }
+};
+
+export const formatEventDate = (isoDate: string, eventTz?: string): string => {
+  try {
+    if (!isoDate) return '';
+    const userTz = getUserTimezone();
+    const tz = eventTz || 'UTC';
+    const date = new Date(isoDate);
+
+    // Use consistent config for both
+    const fmtOpts: Intl.DateTimeFormatOptions = {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true,
+    };
+
+    const localFormatted = new Intl.DateTimeFormat('en-US', { ...fmtOpts, timeZone: userTz }).format(date);
+    const localAbbr = getDynamicTimezoneAbbreviation(date, userTz);
+    const localStr = `${localFormatted} ${localAbbr}`;
+    
+    if (tz !== userTz) {
+      const eventFormatted = new Intl.DateTimeFormat('en-US', { ...fmtOpts, timeZone: tz }).format(date);
+      const eventAbbr = getDynamicTimezoneAbbreviation(date, tz);
+      const eventStr = `${eventFormatted} ${eventAbbr}`;
+      
+      // Only append if the generated representation evaluates differently
+      if (localStr !== eventStr) {
+          return `${localStr} (${eventStr})`;
+      }
+    }
+    
+    return localStr;
+  } catch {
+    return String(isoDate);
   }
 };
 
@@ -44,7 +108,8 @@ export interface CatalogEvent {
   title: string;
   date: string;
   location: string;
-  price: number | 'Free';
+  price: number | string | 'Free';
+  currency: string;
   images: string[];
   category: string;
   organization: string;
@@ -70,9 +135,10 @@ const getFallback = (eventType: string) =>
 const mapEvent = (e: ApiEvent): CatalogEvent => ({
   id:           e._id,
   title:        e.title,
-  date:         formatEventDate(e.startDate),
+  date:         formatEventDate(e.startDate, e.timezone),
   location:     getVenueDisplay(e),
   price:        getPriceDisplay(e),
+  currency:     (e as unknown as { currency?: string }).currency || 'USD',
   images:       [
     e.coverImage,
     ...((e as any).secondaryImages || [])

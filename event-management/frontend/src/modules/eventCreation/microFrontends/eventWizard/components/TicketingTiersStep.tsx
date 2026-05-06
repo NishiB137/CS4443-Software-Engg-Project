@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import type { WizardStepProps, TicketingTier } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 
 const inputCls = (hasError?: boolean) =>
-  `w-full border rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:outline-none transition ${
-    hasError
-      ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50'
-      : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
+  `w-full border rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:outline-none transition ${hasError
+    ? 'border-red-400 focus:ring-red-200 focus:border-red-400 bg-red-50'
+    : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
   }`;
 
 const labelCls = 'block text-sm font-medium text-gray-700 mb-1';
@@ -15,12 +14,15 @@ const EMPTY_TIER: TicketingTier = { name: '', price: 0, capacity: 1, description
 interface TierRowProps {
   tier: TicketingTier;
   index: number;
+  currencySymbol: string;
   onUpdate: (t: TicketingTier) => void;
   onRemove: () => void;
 }
 
-const TierRow: React.FC<TierRowProps> = ({ tier, index, onUpdate, onRemove }) => {
+const TierRow: React.FC<TierRowProps> = ({ tier, index, currencySymbol, onUpdate, onRemove }) => {
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+  const [priceInput, setPriceInput] = useState<string>(tier.price === 0 ? '' : tier.price.toString());
+  const [capacityInput, setCapacityInput] = useState<string>(tier.capacity === 0 ? '' : tier.capacity.toString());
 
   const set = (patch: Partial<TicketingTier>) => {
     onUpdate({ ...tier, ...patch });
@@ -34,7 +36,7 @@ const TierRow: React.FC<TierRowProps> = ({ tier, index, onUpdate, onRemove }) =>
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!tier.name.trim()) errs.name = 'Tier name is required.';
-    if (tier.price <= 0) errs.price = 'Price must be greater than 0.';
+    if (tier.price < 0) errs.price = 'Price cannot be negative.';
     if (!Number.isInteger(tier.capacity) || tier.capacity < 1) errs.capacity = 'Capacity must be at least 1.';
     setLocalErrors(errs);
   };
@@ -79,18 +81,22 @@ const TierRow: React.FC<TierRowProps> = ({ tier, index, onUpdate, onRemove }) =>
         {/* Price */}
         <div>
           <label className={labelCls}>
-            Price (₹ / $) <span className="text-red-500">*</span>
+            Price ({currencySymbol}) <span className="text-red-500">*</span>
           </label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{currencySymbol}</span>
             <input
               type="number"
-              min={0.01}
+              min={0}
               step={0.01}
               placeholder="0.00"
               className={`pl-7 ${inputCls(!!localErrors.price)}`}
-              value={tier.price === 0 ? '' : tier.price}
-              onChange={e => set({ price: parseFloat(e.target.value) || 0 })}
+              value={priceInput}
+              onChange={e => {
+                setPriceInput(e.target.value);
+                const p = parseFloat(e.target.value);
+                set({ price: isNaN(p) ? 0 : p });
+              }}
             />
           </div>
           {localErrors.price && <p className="mt-1 text-xs text-red-600">{localErrors.price}</p>}
@@ -107,8 +113,12 @@ const TierRow: React.FC<TierRowProps> = ({ tier, index, onUpdate, onRemove }) =>
             step={1}
             placeholder="100"
             className={inputCls(!!localErrors.capacity)}
-            value={tier.capacity === 0 ? '' : tier.capacity}
-            onChange={e => set({ capacity: parseInt(e.target.value) || 0 })}
+            value={capacityInput}
+            onChange={e => {
+              setCapacityInput(e.target.value);
+              const c = parseInt(e.target.value);
+              set({ capacity: isNaN(c) ? 0 : c });
+            }}
           />
           {localErrors.capacity && <p className="mt-1 text-xs text-red-600">{localErrors.capacity}</p>}
         </div>
@@ -132,6 +142,7 @@ const TierRow: React.FC<TierRowProps> = ({ tier, index, onUpdate, onRemove }) =>
 
 export const TicketingTiersStep: React.FC<WizardStepProps> = ({ data, updateData }) => {
   const tiers = data.ticketingTiers ?? [];
+  const currencySymbol = data.currency === 'INR' ? '₹' : data.currency === 'EUR' ? '€' : data.currency === 'GBP' ? '£' : '$';
 
   const addTier = () => {
     updateData({ ticketingTiers: [...tiers, { ...EMPTY_TIER }] });
@@ -161,7 +172,13 @@ export const TicketingTiersStep: React.FC<WizardStepProps> = ({ data, updateData
         </p>
       </div>
 
-      {tiers.length === 0 ? (
+      {!data.requiresRegistration ? (
+        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center bg-gray-50/50">
+          <div className="text-4xl mb-3">🔒</div>
+          <p className="text-sm font-medium text-gray-700 mb-1">Registration Disabled</p>
+          <p className="text-xs text-gray-400 mb-6">You must enable registration in the previous steps before adding ticketing tiers.</p>
+        </div>
+      ) : tiers.length === 0 ? (
         <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center bg-gray-50/50">
           <div className="text-4xl mb-3">🎟️</div>
           <p className="text-sm font-medium text-gray-700 mb-1">No ticketing tiers added yet</p>
@@ -181,6 +198,7 @@ export const TicketingTiersStep: React.FC<WizardStepProps> = ({ data, updateData
               key={idx}
               tier={tier}
               index={idx}
+              currencySymbol={currencySymbol}
               onUpdate={t => updateTier(idx, t)}
               onRemove={() => removeTier(idx)}
             />
@@ -193,7 +211,7 @@ export const TicketingTiersStep: React.FC<WizardStepProps> = ({ data, updateData
                 {tiers.length} tier{tiers.length > 1 ? 's' : ''} · {tiers.reduce((acc, t) => acc + (t.capacity || 0), 0).toLocaleString()} total tickets
               </span>
               <span className="text-blue-700 font-medium">
-                ${Math.min(...tiers.map(t => t.price)).toFixed(2)} – ${Math.max(...tiers.map(t => t.price)).toFixed(2)}
+                {currencySymbol}{Math.min(...tiers.map(t => t.price)).toFixed(2)} – {currencySymbol}{Math.max(...tiers.map(t => t.price)).toFixed(2)}
               </span>
             </div>
           )}

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { WizardStepProps } from '@/modules/eventCreation/microFrontends/eventWizard/interface';
 
+
 // ─── Read-only field row ──────────────────────────────────────────────────────
 const FieldRow: React.FC<{ label: string; value?: string; missing?: boolean }> = ({ label, value, missing }) => (
   <div className="flex flex-col gap-0.5 py-2.5 border-b border-gray-50 last:border-0">
@@ -179,9 +180,45 @@ export const Step4Review: React.FC<WizardStepProps & { errors?: Record<string, s
             <div className="bg-gray-50 rounded-xl px-4 py-0.5">
               <FieldRow label="Visibility & Access" value={visibilityLabels[data.visibility]} />
               <FieldRow label="Registration" value={data.requiresRegistration ? `Enabled · ${data.registrationFields.length} fields selected` : 'Not required'} />
+              {data.requiresRegistration && data.entrySettings?.enableAttendanceManagement && (
+                <>
+                  <FieldRow label="Attendance Management" value="Enabled (QR Code check-in)" />
+                  {data.entrySettings.requireSpecificTime ? (
+                     <FieldRow label="Check-in Window" value={`${data.entrySettings.entryStartTime ? new Date(data.entrySettings.entryStartTime).toLocaleString() : 'TBD'} to ${data.entrySettings.entryEndTime ? new Date(data.entrySettings.entryEndTime).toLocaleString() : 'TBD'}`} />
+                  ) : (
+                     <FieldRow label="Check-in Window" value="Anytime" />
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
+
+        {data.ticketingTiers && data.ticketingTiers.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-base font-black text-gray-800">Ticketing Tiers</h3>
+              <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2.5 py-0.5 rounded-full">{data.ticketingTiers.length}</span>
+            </div>
+            <div className="p-6 space-y-3">
+              {data.ticketingTiers.map((t: any, i: number) => (
+                <div key={i} className="flex flex-col gap-1 py-3 border-b border-gray-50 last:border-0">
+                  <div className="flex justify-between items-center">
+                    <p className="font-bold text-gray-900 text-sm">{t.name}</p>
+                    <p className="font-semibold text-blue-600 text-sm">
+                      {data.currency === 'INR' ? '₹' : data.currency === 'EUR' ? '€' : data.currency === 'GBP' ? '£' : '$'}
+                      {t.price}
+                    </p>
+                  </div>
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <p>{t.description || 'No description'}</p>
+                    <p>{t.capacity} tickets available</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {data.sessions.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -220,18 +257,59 @@ export const Step4Review: React.FC<WizardStepProps & { errors?: Record<string, s
             </div>
           </div>
         )}
+        {/* Team summary (read-only — managed in Team & Review step) */}
+        {data.team && data.team.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-50 to-white px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-base font-black text-indigo-900">Team Members</h3>
+              <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2.5 py-0.5 rounded-full">{data.team.length}</span>
+            </div>
+            <div className="p-6 space-y-2">
+              {data.team.map(m => (
+                <div key={m._id} className={`flex items-center gap-3 p-3 rounded-xl border ${
+                  data.reviewerId === m._id ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'
+                }`}>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                    {(m.name || m.username)[0]?.toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{m.name || m.username}</p>
+                    <p className="text-xs text-gray-500 truncate">@{m.username} · {m.role.replace('_', ' ')}</p>
+                  </div>
+                  {data.reviewerId === m._id && (
+                    <span className="text-[10px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded-full uppercase shrink-0">Reviewer</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Publish hint */}
-      <div className="mt-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-6 text-white flex flex-col sm:flex-row items-center gap-6 shadow-xl shadow-blue-900/20">
+      <div className="mt-10 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-3xl p-6 text-white flex flex-col sm:flex-row items-center gap-6 shadow-xl shadow-indigo-900/20">
         <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center flex-shrink-0">
           <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
         </div>
         <div className="text-center sm:text-left flex-1">
-          <p className="font-black text-xl mb-1">Ready to launch?</p>
-          <p className="text-blue-100 font-medium">Use <span className="text-white font-bold bg-white/10 px-2 py-0.5 rounded">Save as Draft</span> to return later, or <span className="text-white font-bold bg-white/10 px-2 py-0.5 rounded">Publish Event</span> to go live now.</p>
+          <p className="font-black text-xl mb-1">Ready to submit?</p>
+          <p className="text-indigo-100 font-medium">
+            Use <span className="text-white font-bold bg-white/10 px-2 py-0.5 rounded">Save as Draft</span> to return later, or{' '}
+            {data.requiresReview && data.reviewerId ? (
+              <>
+                <span className="text-white font-bold bg-white/10 px-2 py-0.5 rounded">Submit for Review</span>{' '}
+                to send your event for team review before it goes live.
+              </>
+            ) : (
+              <>
+                <span className="text-white font-bold bg-white/10 px-2 py-0.5 rounded">Publish Event</span>{' '}
+                to make your event go live immediately.
+              </>
+            )}
+          </p>
         </div>
       </div>
     </div>

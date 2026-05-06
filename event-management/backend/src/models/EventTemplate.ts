@@ -78,6 +78,31 @@ export interface IEventTemplate extends Document {
     attendeeMinAge?: number;
   };
 
+  defaultEntrySettings?: {
+    enableAttendanceManagement: boolean;
+    scannerType: 'qr' | 'none';
+    allowMultipleScans: boolean;
+    requireSpecificTime: boolean;
+    entryStartTime?: Date;
+    entryEndTime?: Date;
+  };
+
+  defaultCurrency: string;
+  defaultTicketingTiers: Array<{ name: string; price: number; capacity: number; duration?: string; description?: string }>;
+
+  // Default registration form configuration
+  requiresRegistration: boolean;
+  defaultRegistrationFields: Array<{
+    key: string;
+    label: string;
+    fieldType: 'text' | 'email' | 'phone' | 'textarea' | 'select';
+    required: boolean;
+    options?: string[];
+    category?: string;
+    categoryOrder?: number;
+    order?: number;
+  }>;
+
   // Session templates bundled with this event template
   sessionTemplates: ISessionTemplate[];
 
@@ -157,10 +182,34 @@ const EventTemplateSchema = new Schema<IEventTemplate>({
   defaultVisibility: { type: String, default: 'public' },
   defaultStatus:     { type: String, default: 'draft' },
 
+  defaultCurrency:   { type: String, default: 'INR', enum: ['USD', 'INR', 'EUR', 'GBP'] },
+  defaultTicketingTiers: [{ name: { type: String, required: true }, price: { type: Number, required: true }, capacity: { type: Number, required: true }, duration: { type: String }, description: { type: String } }],
+
+  requiresRegistration: { type: Boolean, default: false },
+  defaultRegistrationFields: [{
+    key:           { type: String, required: true },
+    label:         { type: String, required: true },
+    fieldType:     { type: String, enum: ['text', 'email', 'phone', 'textarea', 'select'], default: 'text' },
+    required:      { type: Boolean, default: false },
+    options:       [{ type: String }],
+    category:      { type: String },
+    categoryOrder: { type: Number, default: 0 },
+    order:         { type: Number, default: 0 },
+  }],
+
   defaultPolicies: {
     refundPolicy:       { type: String },
     cancellationPolicy: { type: String },
     attendeeMinAge:     { type: Number, default: 0 },
+  },
+
+  defaultEntrySettings: {
+    enableAttendanceManagement: { type: Boolean, default: false },
+    scannerType: { type: String, enum: ['qr', 'none'], default: 'none' },
+    allowMultipleScans: { type: Boolean, default: false },
+    requireSpecificTime: { type: Boolean, default: false },
+    entryStartTime: { type: Date },
+    entryEndTime: { type: Date }
   },
 
   sessionTemplates: [SessionTemplateSchema],

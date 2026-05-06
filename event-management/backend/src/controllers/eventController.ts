@@ -2,8 +2,8 @@ import type { Request, Response } from 'express';
 import * as eventService from '../services/eventService.js';
 
 // Temporary dev user IDs until auth is implemented (Sprint 3)
-const DEV_USER_ID  = '000000000000000000000001';
-const DEV_ORG_ID   = '000000000000000000000002';
+const DEV_USER_ID = '000000000000000000000001';
+const DEV_ORG_ID = '000000000000000000000002';
 
 // Helper: Express params can be string | string[] — always get a plain string
 const param = (req: Request, key: string): string =>
@@ -15,7 +15,7 @@ export const createEvent = async (req: Request, res: Response) => {
     const body = {
       ...req.body,
       // Sprint 2: use dev IDs if not provided (auth skipped)
-      createdBy:    req.body.createdBy    || DEV_USER_ID,
+      createdBy: req.body.createdBy || DEV_USER_ID,
       organization: req.body.organization || DEV_ORG_ID,
     };
 
@@ -38,6 +38,7 @@ export const listEvents = async (req: Request, res: Response) => {
       search,
       organization,
       createdBy,
+      userRolesFor,
       page,
       limit,
       category,
@@ -51,15 +52,16 @@ export const listEvents = async (req: Request, res: Response) => {
 
     // exactOptionalPropertyTypes: only include keys whose value is not undefined
     const filters: Parameters<typeof eventService.listEvents>[0] = {
-      page:  page  ? Number(page)  : 1,
+      page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 12,
     };
-    if (typeof status       === 'string') filters.status       = status;
-    if (typeof visibility   === 'string') filters.visibility   = visibility;
-    if (typeof search       === 'string') filters.search       = search;
+    if (typeof status === 'string') filters.status = status;
+    if (typeof visibility === 'string') filters.visibility = visibility;
+    if (typeof search === 'string') filters.search = search;
     if (typeof organization === 'string') filters.organization = organization;
-    if (typeof createdBy    === 'string') filters.createdBy    = createdBy;
-    if (isFree === 'true')  filters.isFree = true;
+    if (typeof createdBy === 'string') filters.createdBy = createdBy;
+    if (typeof userRolesFor === 'string') filters.userRolesFor = userRolesFor;
+    if (isFree === 'true') filters.isFree = true;
     if (isFree === 'false') filters.isFree = false;
     if (typeof category === 'string') filters.category = category;
     if (typeof eventType === 'string') filters.eventType = eventType;
@@ -89,6 +91,17 @@ export const getEvent = async (req: Request, res: Response) => {
       return;
     }
     res.json({ success: true, data: event });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(500).json({ success: false, message });
+  }
+};
+
+// ─── GET /api/events/timezones ────────────────────────────────────────────────
+export const getTimezones = async (_req: Request, res: Response) => {
+  try {
+    const timezones = (Intl as any).supportedValuesOf('timeZone');
+    res.json({ success: true, data: timezones });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Server error';
     res.status(500).json({ success: false, message });
@@ -210,7 +223,7 @@ export const unlikeEvent = async (req: Request, res: Response) => {
       res.json({ success: true, likes: 0 });
       return;
     }
-    
+
     res.json({
       success: true,
       likes: updated.analytics?.likes ?? 0,
@@ -263,12 +276,12 @@ export const getHierarchy = async (req: Request, res: Response) => {
   try {
     // 1. Fetch all main events
     const mainEvents = await Event.find({ eventLevel: 'main' }).lean();
-    
+
     // 2. Map through to attach Sub-events and Sessions
     const hierarchy = await Promise.all(mainEvents.map(async (main) => {
       const subEvents = await Event.find({ parentEvent: main._id }).lean();
       const mainSessions = await Session.find({ event: main._id }).lean();
-      
+
       const populatedSubEvents = await Promise.all(subEvents.map(async (sub) => {
         const subSessions = await Session.find({ event: sub._id }).lean();
         return { ...sub, sessions: subSessions };
@@ -361,23 +374,35 @@ export const saveAsTemplate = async (req: Request, res: Response) => {
     }
 
     const tpl = await EventTemplate.create({
-      name:             templateName,
-      description:      event.shortDescription || event.description?.slice(0, 200) || '',
-      eventType:        event.eventType,
-      format:           event.format,
-      isFree:           event.isFree,
-      isDefault:        false,
+      name: templateName,
+      description: event.shortDescription || event.description?.slice(0, 200) || '',
+      eventType: event.eventType,
+      format: event.format,
+      isFree: event.isFree,
+      isDefault: false,
       isSystemTemplate: false,
-      createdBy:        event.createdBy,
-      organization:     event.organization,
-      fields:           baseFields,
-      layout:           baseLayout,
+      createdBy: event.createdBy,
+      organization: event.organization,
+      fields: baseFields,
+      layout: baseLayout,
       defaultVisibility: event.visibility || 'public',
-      defaultStatus:     'draft',
-      defaultPolicies:   event.policies ?? {},
-      sessionTemplates:  baseSessionTemplates,
-      coverColor:        '#3B82F6',
-      tags:              [],
+      defaultStatus: 'draft',
+      defaultPolicies: event.policies ?? {},
+      sessionTemplates: baseSessionTemplates,
+      coverColor: '#3B82F6',
+      tags: [],
+      // Persist ticketing + registration from the event
+      defaultTicketingTiers: event.ticketingTiers ?? [],
+      requiresRegistration: event.requiresRegistration ?? false,
+      defaultRegistrationFields: event.registrationFields ?? [],
+      defaultEntrySettings: event.entrySettings
+        ? {
+            enableAttendanceManagement: (event.entrySettings as any).enableAttendanceManagement ?? false,
+            scannerType: (event.entrySettings as any).scannerType ?? 'none',
+            allowMultipleScans: (event.entrySettings as any).allowMultipleScans ?? false,
+            requireSpecificTime: (event.entrySettings as any).requireSpecificTime ?? false,
+          }
+        : undefined,
     });
 
     res.status(201).json({ success: true, data: tpl });
@@ -386,3 +411,56 @@ export const saveAsTemplate = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message });
   }
 };
+
+// ─── PATCH /api/events/:id/approve ───────────────────────────────────────────────────
+export const approveEvent = async (req: Request, res: Response) => {
+  try {
+    const changedBy = (req.body as any).changedBy || DEV_USER_ID;
+    const event = await eventService.approveEvent(param(req, 'id'), changedBy);
+    if (!event) { res.status(404).json({ success: false, message: 'Event not found' }); return; }
+    res.json({ success: true, data: event });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(400).json({ success: false, message });
+  }
+};
+
+// ─── PATCH /api/events/:id/reject ──────────────────────────────────────────────────────
+export const rejectEvent = async (req: Request, res: Response) => {
+  try {
+    const changedBy = (req.body as any).changedBy || DEV_USER_ID;
+    const reason   = (req.body as any).reason as string | undefined;
+    const event = await eventService.rejectEvent(param(req, 'id'), changedBy, reason);
+    if (!event) { res.status(404).json({ success: false, message: 'Event not found' }); return; }
+    res.json({ success: true, data: event });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(400).json({ success: false, message });
+  }
+};
+
+// ─── GET /api/events/pending-review ────────────────────────────────────────────────────
+export const listPendingReview = async (req: Request, res: Response) => {
+  try {
+    const reviewerId = req.query['reviewerId'] as string | undefined;
+    const events = await eventService.listPendingReview(reviewerId);
+    res.json({ success: true, data: events });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(500).json({ success: false, message });
+  }
+};
+
+// ─── GET /api/events/recommendations ───────────────────────────────────────────────────
+export const getRecommendations = async (req: Request, res: Response) => {
+  try {
+    const userId = req.query['userId'] as string | undefined;
+    const result = await eventService.getRecommendedEvents(userId);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    res.status(500).json({ success: false, message });
+  }
+};
+
+// ─── GET /api/auth/user-by-username (re-exported here for convenience) ────────
